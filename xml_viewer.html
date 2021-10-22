@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>sondering</title>
+</head>
+
+<body>
+
+    <input type="file" id="fileUpload" />
+    <input type="button" id="upload" value="Upload" onclick="Upload()" />
+    <hr />
+
+    <div id="my_dataviz"></div>
+
+    <script type="text/javascript"
+        src="https://cdn.jsdelivr.net/gh/exupero/saveSvgAsPng@1.4.17/src/saveSvgAsPng.js"></script>
+
+    <script src="https://d3js.org/d3.v4.js"></script>
+
+    <script type="text/javascript">
+
+        function Upload() {
+            //Reference the FileUpload element.
+            var fileUpload = document.getElementById("fileUpload");
+
+            //Validate whether File is valid xml file.
+            var regex = /^([a-zA-Z0-9\s_\\.\-:])+(.xml)$/;
+            if (regex.test(fileUpload.value.toLowerCase())) {
+                if (typeof (FileReader) != "undefined") {
+                    var reader = new FileReader();
+
+                    //For Browsers other than IE.
+                    if (reader.readAsBinaryString) {
+                        reader.onload = function (e) {
+                            xmlData = ProcessXML(e.target.result);
+                        };
+                        reader.readAsBinaryString(fileUpload.files[0]);
+                    } else {
+                        //For IE Browser.
+                        reader.onload = function (e) {
+                            var data = "";
+                            var bytes = new Uint8Array(e.target.result);
+                            for (var i = 0; i < bytes.byteLength; i++) {
+                                data += String.fromCharCode(bytes[i]);
+                            }
+                            xmlData = ProcessXML(data);
+                        };
+                        reader.readAsArrayBuffer(fileUpload.files[0]);
+                    }
+                } else {
+                    alert("This browser does not support HTML5.");
+                }
+            } else {
+                alert("Please upload a valid Excel file.");
+            }
+        };
+
+        function ProcessXML(xmlString) {
+            var today = new Date();
+            var year = today.getFullYear();
+            var month = today.getMonth() + 1;
+            var day = today.getDate();
+
+            // in javascript werkt \d niet
+            var objectId_pattern = '<ns.*:objectIdAccountableParty>\s*(.*)\s*</ns.*:objectIdAccountableParty>';
+            var broId_pattern = '<ns.*:broId>\s*(.*)\s*</ns.*:broId>';
+            var date_pattern = '<.*date>(.*)</.*date>';
+            var xy_id_pattern = '<.*?:pos>(.*) (.*)</.*:pos>';
+            var z_id_pattern = '<ns.*:offset uom="(.*)">\s*(.*)\s*</ns.*:offset>';
+            var data_pattern = '<ns.*:values>\s*(.*)\s*</ns.*:values>';
+            var rf_included_pattern = '<ns.*:frictionRatio>(.*)</ns.*:frictionRatio>';
+
+            try {
+                var id = xmlString.match(objectId_pattern)[1]
+            }
+            catch { }
+
+            try {
+                var id = xmlString.match(broId_pattern)[1]
+            }
+            catch { }
+
+            try {
+                var date = xmlString.match(date_pattern)[1]
+            }
+            catch { }
+
+            try {
+                var xCoord = xmlString.match(xy_id_pattern)[1]
+            }
+            catch { }
+
+            try {
+                var yCoord = xmlString.match(xy_id_pattern)[2];
+            }
+            catch { }
+
+            try {
+                var groundlevel = xmlString.match(z_id_pattern)[2];
+            }
+            catch { }
+
+            try {
+                var data = xmlString.match(data_pattern)[1];
+            }
+            catch { }
+
+            try {
+                var rf_included = xmlString.match(rf_included_pattern)[1];
+            }
+            catch { }
+
+            if (rf_included == 'ja') {
+                    rf_included = true;
+                }
+                else {
+                    rf_included = false;
+                }
+
+
+            // convert data from string to 2d array
+            data = data.split(';');
+            for (var i = 0; i < data.length; i++) {
+                data[i] = data[i].split(",");
+            };
+
+            var margin = { top: 30, right: 30, bottom: 100, left: 60 },
+                width = 460 - margin.left - margin.right,
+                height = 800 - margin.top - margin.bottom;
+
+            // filter de dummy waarden
+            data = data.filter(function (d) { return d[3] != "-999999" }); // TODO: maak een variabele
+            data = data.filter(function (d) { return d[24] != "-999999" }); // TODO: maak een variabele
+            // Convert strings to numbers and dates
+            data.forEach(function (d) {
+                d[0] = groundlevel - d[0];
+                d[3] = +d[3];
+                if (rf_included) {
+                    d[24] = +d[24]
+                };
+            });
+
+            // append the svg object to the body of the page
+            var svg = d3.select("#my_dataviz")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform",
+                    "translate(" + margin.left + "," + margin.top + ")");
+
+            // Add X axis
+            var xqc = d3.scaleLinear()
+                .domain(d3.extent(data, function (d) { return d[3]; }))
+                .range([0, width]);
+            svg.append("g")
+                .call(d3.axisBottom(xqc));
+
+            if (rf_included) {
+                var xrf = d3.scaleLinear()
+                    .domain(d3.extent(data, function (d) { return d[24]; }))
+                    .range([width, width * 0.8]);
+                svg.append("g")
+                    .call(d3.axisTop(xrf));
+            }
+            // Add Y axis
+            var y = d3.scaleLinear()
+                .domain(d3.extent(data, function (d) { return d[0]; }))
+                .range([height, 0]);
+            svg.append("g")
+                .call(d3.axisLeft(y));
+
+            // Add grid lines
+            const yGrid = d3.axisLeft()
+                .scale(y)
+                .tickFormat('')
+                .ticks(25) // TODO: hoe werkt dit?
+                .tickSizeInner(-width)
+
+            const xGrid = d3.axisBottom()
+                .scale(xqc)
+                .tickFormat('')
+                .ticks(10)
+                .tickSizeInner(height)
+
+            svg.append('g')
+                .attr('class', 'y-grid')
+                .attr("fill", "none")
+                .attr("stroke", "#d3d3d3")
+                .attr("stroke-width", 0.3)
+                .call(yGrid)
+
+            svg.append('g')
+                .attr('class', 'x-grid')
+                .attr("fill", "none")
+                .attr("stroke", "#d3d3d3")
+                .attr("stroke-width", 0.3)
+                .call(xGrid)
+
+
+            // Add lines
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "brown")
+                .attr("stroke-width", 1.5)
+                .attr("d", d3.line()
+                    .x(function (d) { return xqc(d[3]) })
+                    .y(function (d) { return y(d[0]) })
+                )
+
+            if (rf_included) {
+                svg.append("path")
+                    .datum(data)
+                    .attr("fill", "none")
+                    .attr("stroke", "green")
+                    .attr("stroke-width", 1.5)
+                    .attr("d", d3.line()
+                        .x(function (d) { return xrf(d[24]) })
+                        .y(function (d) { return y(d[0]) })
+                    )
+            }
+
+            // create rectangle around the text 
+            svg.append("line")
+                .attr("fill", "none")
+                .attr("stroke", "black")
+                .attr("stroke-width", 1.5)
+                .attr("x1", 0)
+                .attr("y1", height)
+                .attr("x2", 0)
+                .attr("y2", height + margin.bottom)
+
+
+            const p = d3.path();
+            p.moveTo(0, height)
+            p.lineTo(0, height + margin.bottom)
+            p.lineTo(width, height + margin.bottom)
+            p.lineTo(width, height)
+            p.closePath()
+
+            svg.append("path")
+                .attr("d", p)
+                .attr("stroke", "black")
+                .attr("fill", "none")
+
+            // Add a title
+            svg.append("text")
+                .attr("x", 0)
+                .attr("y", height + margin.top)
+                .attr("text-anchor", "left")
+                .style("font-size", "16px")
+                .style("font-family", "sans-serif")
+                .append('svg:tspan')
+                .attr('x', 0)
+                .attr('dy', 5)
+                .text(`${id}`)
+                .append('svg:tspan')
+                .style("font-size", "12px")
+                .attr('x', 0)
+                .attr('dy', 20)
+                .text(`${date}`)
+                .append('svg:tspan')
+                .attr('x', 0)
+                .attr('dy', 20)
+                .text(`x: ${xCoord} y: ${yCoord}`)
+
+//            saveSvgAsPng(document.getElementsByTagName("svg")[0], `${id}.png`);
+        }
+
+
+    </script>
+
+</body>
+
+</html>
