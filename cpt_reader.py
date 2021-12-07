@@ -37,10 +37,7 @@ class Cpt():
         xy_id_pattern = re.compile(r'<ns\d*:location srsName="urn:ogc:def:crs:EPSG::28992"\s*.*\d*?:id="BRO_\d*">\s*' + 
                                         r'<.*\d*?:pos>(?P<X>\d*.?\d*)\s*(?P<Y>\d*.?\d*)</.*\d*?:pos>')
         z_id_pattern = re.compile(r'<ns\d*:offset uom="(?P<z_unit>.*)">(?P<Z>-?\d*.?\d*)</ns\d*:offset>')
-        trajectory_pattern = re.compile(r'<ns\d*:trajectory>\s*' + 
-                                            r'<ns\d*:predrilledDepth uom="m">(?P<predrilled>\d*.?\d*)\s*</ns\d*:predrilledDepth>\s*' + 
-                                            r'<ns\d*:finalDepth uom="m">(?P<finalDepth>\d*.?\d*)</ns\d*:finalDepth>\s'+ 
-                                        r'*</ns\d*:trajectory>')
+        trajectory_pattern = re.compile(r'<ns\d*:finalDepth uom="m">(?P<finalDepth>\d*.?\d*)</ns\d*:finalDepth>\s')
         report_date_pattern = re.compile(r'<ns\d*:researchReportDate>\s*<ns\d*:date>(?P<report_date>\d*-\d*-\d*)</ns\d*:date>')
         removed_layer_pattern = re.compile(r'<ns\d*:removedLayer>\s*'+ 
                                                 r'<ns\d*:sequenceNumber>(?P<layerNr>\d*)</ns\d*:sequenceNumber>\s*' + 
@@ -164,7 +161,7 @@ class Cpt():
         projectname_pattern = re.compile(r'#PROJECTNAME\s*=\s*(?P<projectname>.*)\s*')
         companyid_in_measurementext_pattern = re.compile(r'#MEASUREMENTTEXT\s*=\s*\d*,\s*(?P<companyid>.*),\s*boorbedrijf\s*')
         projectname_in_measurementtext_pattern = re.compile(r'#MEASUREMENTTEXT\s*=\s*\d*,\s*(?P<projectname>.*),\s*projectnaam\s*')
-        filedate_pattern = re.compile(r'#FILEDATE\s*=\s*(?P<filedate>\d*,\s*\d*,\s*\d*)\s*')
+        startdate_pattern = re.compile(r'#STARTDATE\s*=\s*(?P<startdate>\d*,\s*\d*,\s*\d*)\s*')
         testid_pattern = re.compile(r'#TESTID\s*=\s*(?P<testid>.*)\s*')
 
         data_pattern = re.compile(r'#EOH\s*=\s*(?P<data>(.*\n)*)')
@@ -242,10 +239,10 @@ class Cpt():
         except:
             pass
         try:
-            match = re.search(filedate_pattern, gef_raw)
-            filedatestring = match.group('filedate')
-            filedatelist = [int(x) for x in filedatestring.split(',')]
-            self.filedate = date(filedatelist[0], filedatelist[1], filedatelist[2])
+            match = re.search(startdate_pattern, gef_raw)
+            startdatestring = match.group('startdate')
+            startdatelist = [int(x) for x in startdatestring.split(',')]
+            self.startdate = date(startdatelist[0], startdatelist[1], startdatelist[2])
         except:
             pass
         try:
@@ -306,33 +303,32 @@ class Cpt():
         # soms is de ingelezen diepte positief en soms negatief
         # moet positief zijn 
         if "depth" in self.data.columns:
-            if (self.data["depth"].min() < 0):
-                self.data["depth"] = - self.data["depth"]
+            self.data["depth"] = self.data["depth"].abs()
 
         # soms is er geen diepte, maar wel sondeerlengte aanwezig
         # sondeerlengte als diepte gebruiken is goed genoeg als benadering
         elif "penetrationLength" in self.data.columns:
             self.data["depth"] = self.data["penetrationLength"]
 
+        # nan waarden geven vervelende strepen in de afbeeldingen
+        self.data.dropna(subset=["depth", "coneResistance", "localFriction", "frictionRatio"], inplace=True)
+
+        # er komen soms negatieve waarden voor in coneResistance en frictionRatio, dat geeft vervelende strepen
+        self.data = self.data[self.data["coneResistance"] >= 0]
+        self.data = self.data[self.data["localFriction"] >= 0]
+        self.data = self.data[self.data["frictionRatio"] >= 0]
+        # frictionRatio kan ook heel groot zijn, dat geeft vervelende strepen
+        self.data = self.data[self.data["frictionRatio"] <= 12]
+
         # lengte van sondering
         # gelijk aan finaldepth in xml
-        self.finaldepth = self.data["depth"].min()
-
+        self.finaldepth = self.data["depth"].max()
 
     def plot(self):
         if self.groundlevel == None:
             self.groundlevel = 0
 
-        if "depth" in self.data.columns:
-            if (self.data["depth"].min() < 0): # TODO: dit moet ergens anders. depth moet altijd dezelfde conventie volgen
-                y = self.groundlevel + self.data["depth"]
-            else:
-                y = self.groundlevel - self.data["depth"]
-        else:
-            if (self.data["penetrationLength"].min() < 0):
-                y = self.groundlevel + self.data["penetrationLength"]
-            else:
-                y = self.groundlevel - self.data["penetrationLength"]
+        y = self.groundlevel - self.data["depth"]
         x1 = self.data["coneResistance"]
         x2 = self.data["frictionRatio"]
 
@@ -391,20 +387,23 @@ class Cpt():
         ax3.text(0.05, 0.9, self.testid, va="center", ha="left")
         ax3.text(0.05, 0.75, self.easting, va="center", ha="left")
         ax3.text(0.25, 0.75, self.northing, va="center", ha="left")
-        ax3.text(0.05, 0.6, self.filedate, va="center", ha="left")
+        ax3.text(0.05, 0.6, self.startdate, va="center", ha="left")
         
         # stel een titel in
         plt.suptitle(self.testid)
         # sla de figuur op
         plt.savefig(fname=f"./output/{self.filename}.png")
+        plt.close('all')
 
         # andere optie
         save_as_projectid_fromfile = False
         if save_as_projectid_fromfile:
             if self.projectid is not None: # TODO: dit moet ergens anders. Moet ook projectid uit mapid kunnen halen
                 plt.savefig(fname=f"./output/{self.projectid}_{self.testid}.png")
+                plt.close('all')
             elif self.projectname is not None:
                 plt.savefig(fname=f"./output/{self.projectname}_{self.testid}.png")
+                plt.close('all')
 
 
 class Bore():
@@ -432,7 +431,7 @@ class Bore():
         report_date_pattern = re.compile(r'<ns\d*:descriptionReportDate>\s*<date>(?P<report_date>\d*-\d*-\d*)</date>')
 
         # TODO: dit kan worden opgesplitst, maar dan raak je wel de samenhang kwijt
-
+        # TODO: met """ i.p.v. ' ' + ' '
         soil_pattern = re.compile(r'<ns\d*:layer>\s*' + 
                                     r'<ns\d*:upperBoundary uom="m">(?P<layerUpper>\d*.?\d*)</ns\d*:upperBoundary>\s*' +
                                     r'<ns\d*:upperBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod">.*</ns\d*:upperBoundaryDetermination>\s*' +
@@ -553,6 +552,13 @@ class Bore():
         # zet om in een dataframe om het makkelijker te verwerken
         self.soillayers = pd.DataFrame(self.soillayers)
 
+        # voeg een plotkleur toe
+        colorsDict = {"zand": "yellow", "veen": "brown", "klei": "green", "grind": "orange", "silt": "blue"}
+        colors = self.soillayers["soilName"]
+        for soil, color in colorsDict.items():
+            colors = np.where(self.soillayers["soilName"].str.lower().str.endswith(soil), color, colors)
+        self.soillayers["plotColor"] = colors
+
         # voeg kolommen toe met absolute niveaus (t.o.v. NAP)
         self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upper"] 
         self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lower"] 
@@ -560,19 +566,15 @@ class Bore():
     def plot(self):
         # maak een eenvoudige plot van een boring, alleen het hoofdmateriaal
         fig, ax = plt.subplots(figsize=(10,5))
-        colorsDict = {"zand": "yellow", "veen": "brown", "klei": "green", "grind": "orange", "silt": "blue"}
         hatchesDict = {"zand": "...", "veen": "---", "klei": "///", "grind": "ooo", "silt": "xxx"}
-
-        colors = self.soillayers["soilName"]
-        for soil, color in colorsDict.items():
-            colors = np.where(self.soillayers["soilName"].str.lower().str.endswith(soil), color, colors)
-        
+       
         hatches = self.soillayers["soilName"]
         for soil, hatch in hatchesDict.items():
             hatches = np.where(self.soillayers["soilName"].str.lower().str.endswith(soil), hatch, hatches)
 
         uppers = list(self.soillayers["upper_NAP"])
         labels = list(self.soillayers["soilName"])
+        colors = list(self.soillayers["plotColor"])
 
         # maak een staafdiagram, met overlappende staven
         for upper, color, hatch, label in reversed(list(zip(uppers, colors, hatches, labels))):
