@@ -153,7 +153,7 @@ class Cpt():
             '22': 'inclinationY'
         }
 
-        filename_pattern = re.compile(r'(.*/)*(?P<filename>.*)\.')
+        filename_pattern = re.compile(r'(.*[\\/])*(?P<filename>.*)\.')
         gefid_pattern = re.compile(r'#GEFID\s*=\s*(?P<gefid>\d,\d,\d)\s*')
         xydxdy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<coordsys>\d*)\s*,\s*(?P<X>\d*.?\d*)\s*,\s*(?P<Y>\d*.?\d*)\s*,\s*(?P<dx>\d*.?\d*),\s*(?P<dy>\d*.?\d*)\s*')
         xy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<coordsys>\d*)\s*,\s*(?P<X>\d*.?\d*)\s*,\s*(?P<Y>\d*.?\d*)\s*')
