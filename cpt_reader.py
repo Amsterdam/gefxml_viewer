@@ -34,7 +34,7 @@ class Cpt():
 
     def load_xml(self, xmlFile):
 
-        filename_pattern = re.compile(r'(.*/)*(?P<filename>.*)\.')
+        filename_pattern = re.compile(r'(.*[\\/])*(?P<filename>.*)\.')
         testid_pattern = re.compile(r'<ns\d*:broId>\s*(?P<testid>.*)</ns\d*:broId>')
         objectid_pattern = re.compile(r'<ns\d*:objectIdAccountableParty>\s*(?P<testid>.*)\s*</ns\d*:objectIdAccountableParty>')
         xy_id_pattern = re.compile(r'<ns\d*:location srsName="urn:ogc:def:crs:EPSG::28992"\s*.*\d*?:id="BRO_\d*">\s*' + 
