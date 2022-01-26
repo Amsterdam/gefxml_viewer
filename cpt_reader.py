@@ -367,6 +367,9 @@ class Cpt():
         axes[3].legend()
         axes[4].legend()
 
+        axes[0].set_xlim([0, 40])
+        axes[2].set_xlim([0, 12])
+
         # Plot top datablock with CPT information
         plt.suptitle(f'CPT: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nz-coördinaat: {self.groundlevel}\n', x=0.15, y=0.09, ha='left', fontsize=14, fontweight='bold')
         fig.supxlabel(f'Uitvoerder: {self.companyid}\nDatum: {self.reportdate}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', y=0.05 , ha='left', va='bottom', fontsize=14, fontweight='bold')
