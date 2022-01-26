@@ -311,7 +311,7 @@ class Cpt():
         # soms is er geen diepte, maar wel sondeerlengte aanwezig
         # sondeerlengte als diepte gebruiken is goed genoeg als benadering
         elif "penetrationLength" in self.data.columns:
-            self.data["depth"] = self.data["penetrationLength"]
+            self.data["depth"] = self.data["penetrationLength"].abs()
 
         # nan waarden geven vervelende strepen in de afbeeldingen
         self.data.dropna(subset=["depth", "coneResistance", "localFriction", "frictionRatio"], inplace=True)
