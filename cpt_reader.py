@@ -1,12 +1,12 @@
 """
 Script om sonderingen in te lezen vanuit GEF of XML
-kan ook boringen in XML inlezen
 en sonderingen plotten
 
 Geschreven door Thomas van der Linden, Ingenieursbureau Amsterdam
 19 oktober 2021
 """
 
+from ctypes import alignment
 from typing import List
 import pandas as pd
 from io import StringIO
@@ -28,10 +28,13 @@ class Cpt():
         self.removedlayers = {}
         self.data = None
         self.filename = None
+        self.companyid = None
+        self.projectid = None
+        self.projectname = None
 
     def load_xml(self, xmlFile):
 
-        filename_pattern = re.compile(r'.*\\(?P<filename>.*)')
+        filename_pattern = re.compile(r'(.*/)*(?P<filename>.*)\.')
         testid_pattern = re.compile(r'<ns\d*:broId>\s*(?P<testid>.*)</ns\d*:broId>')
         objectid_pattern = re.compile(r'<ns\d*:objectIdAccountableParty>\s*(?P<testid>.*)\s*</ns\d*:objectIdAccountableParty>')
         xy_id_pattern = re.compile(r'<ns\d*:location srsName="urn:ogc:def:crs:EPSG::28992"\s*.*\d*?:id="BRO_\d*">\s*' + 
@@ -150,7 +153,7 @@ class Cpt():
             '22': 'inclinationY'
         }
 
-        filename_pattern = re.compile(r'.*\\(?P<filename>.*)')
+        filename_pattern = re.compile(r'(.*/)*(?P<filename>.*)\.')
         gefid_pattern = re.compile(r'#GEFID\s*=\s*(?P<gefid>\d,\d,\d)\s*')
         xydxdy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<coordsys>\d*)\s*,\s*(?P<X>\d*.?\d*)\s*,\s*(?P<Y>\d*.?\d*)\s*,\s*(?P<dx>\d*.?\d*),\s*(?P<dy>\d*.?\d*)\s*')
         xy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<coordsys>\d*)\s*,\s*(?P<X>\d*.?\d*)\s*,\s*(?P<Y>\d*.?\d*)\s*')
@@ -329,73 +332,63 @@ class Cpt():
             self.groundlevel = 0
 
         y = self.groundlevel - self.data["depth"]
-        x1 = self.data["coneResistance"]
-        x2 = self.data["frictionRatio"]
 
         # x,y voor maaiveld in figuur
         x_maaiveld = [0, 10]
         y_maaiveld = [self.groundlevel, self.groundlevel]
 
         # figuur met twee grafieken
-        fig = plt.figure(constrained_layout=True, figsize=(8,10))
-        gs = GridSpec(nrows=2, ncols=2, figure=fig, width_ratios=[4,1], height_ratios=[10,1])
-        # grafiek 1 is conusweerstand
-        ax1 = fig.add_subplot(gs[0,0])
-        # grafiek 2 is wrijvingsgetal
-        ax2 = fig.add_subplot(gs[0,1])
-        # een rechthoek voor de metadata
-        ax3 = fig.add_subplot(gs[1,:])
-        # plot conusweerstand
-        ax1.plot(x1, y)
+        fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(18,24), sharey=True, gridspec_kw = {'width_ratios':[5, 1, 1, 1, 1]})
+
+        axes[0].plot(self.data['coneResistance'], y, label='qc [MPa]', linewidth=1.25, color='#4b0082')
+        axes[1].plot(self.data["localFriction"], y, label='fs [MPa]', linewidth=1.25, color='blue')
+        axes[2].plot(self.data["frictionRatio"], y, label='Rf [%]', linewidth=1.25, color='red')
+        
+        inclinations = ["inclinationEW", "inclinationNS", "inclinationX", "inclinationY", "inclinationResultant"]
+        for inclination in inclinations:
+            if inclination in self.data.columns:
+                axes[3].plot(self.data[inclination], y, label=re.sub(r'inclination', '', inclination), linewidth=1.25, color='green')
+        
+        porePressures = ["porePressureU1", "porePressureU2", "porePressureU3"]
+        for porePressure in porePressures:
+            if porePressure in self.data.columns:
+                axes[4].plot(self.data[porePressure], y, label=porePressure[-2:], linewidth=1.25, color='blue')
+
         # plot maaiveld, bestaat uit een streep en een arcering
-        ax1.plot(x_maaiveld, y_maaiveld, color='black')
-        ax1.barh(self.groundlevel, width=10, height=-0.4, align='edge', hatch='/\/', color='#ffffffff')
-        # plot wrijvingsgetal
-        ax2.plot(x2, y)
+        axes[0].plot(x_maaiveld, y_maaiveld, color='black')
+        axes[0].barh(self.groundlevel, width=10, height=-0.4, align='edge', hatch='/\/', color='#ffffffff')
 
-        # stel maximum en minimum waarden in voor assen
-        ax1.set_xlim(0,40)
-        ax2.set_xlim(0,10)
-        ax1.set_ylim(y.min(), int(self.groundlevel) + 1)
-        ax2.set_ylim(y.min(), int(self.groundlevel) + 1)
+        axes[0].set_ylabel("Niveau [m t.o.v. NAP]")
+        axes[0].set_xlabel("qc [MPa]")
+        axes[1].set_xlabel("fs [MPa]")
+        axes[2].set_xlabel("Rf [%]")
+        axes[3].set_xlabel("helling [deg]")
+        axes[4].set_xlabel("u [Mpa]")
+        axes[3].legend()
+        axes[4].legend()
 
-        # stel markeringen op de x-assen in
-        ax1.set_xticks(ticks=np.arange(0, 40, 5))
-        ax2.set_xticks(ticks=np.arange(0, 10, 2))
-        ax1.set_xticks(ticks=np.arange(0, 40, 1), minor=True)
-        ax2.set_xticks(ticks=np.arange(0, 10, 1), minor=True)
-        
-        # stel markeringen op de y-assen in
-        ax1.set_yticks(ticks=np.arange(int(y.min())-1, int(self.groundlevel)+1, 1))
-        ax2.set_yticks(ticks=np.arange(int(y.min())-1, int(self.groundlevel)+1, 1))
-        ax1.set_yticks(ticks=np.arange(int(y.min())-1, int(y.max())+1, 0.5), minor=True)
-        ax2.set_yticks(ticks=np.arange(int(y.min())-1, int(y.max())+1, 0.5), minor=True)
+        # Plot top datablock with CPT information
+        plt.suptitle(f'CPT: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nz-coördinaat: {self.groundlevel}\n', x=0.15, y=0.09, ha='left', fontsize=14, fontweight='bold')
+        fig.supxlabel(f'Uitvoerder: {self.companyid}\nDatum: {self.reportdate}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', y=0.05 , ha='left', va='bottom', fontsize=14, fontweight='bold')
+        # Plot bottom datablock with general information
+        plt.title('Ingenieursbureau\n Gemeente Amsterdam\n Vakgroep Geotechniek\n Python ', loc='left', fontsize=13.5)
 
-        # maak een grid
-        ax1.grid(True, which="major", axis="both", color="black", linestyle='-')
-        ax1.grid(True, which="minor", axis="both", linestyle='--')
-        ax2.grid(True, which="major", axis="both", color="black", linestyle='-')
-        ax2.grid(True, which="minor", axis="both", linestyle='--')
+        for ax in axes:
 
-        # stel labels bij de assen in
-        ax1.set_xlabel("qc [MPa]")
-        ax1.set_ylabel("Niveau [m t.o.v. NAP]")
-        ax1.text(10, self.groundlevel, f'Maaiveld: NAP {self.groundlevel} m')
-        ax2.set_xlabel("Rf [%]")
+            ax.minorticks_on()
 
-        # voeg metadata toe aan
-        ax3.text(0.05, 0.9, self.testid, va="center", ha="left")
-        ax3.text(0.05, 0.75, self.easting, va="center", ha="left")
-        ax3.text(0.25, 0.75, self.northing, va="center", ha="left")
-        ax3.text(0.05, 0.6, self.startdate, va="center", ha="left")
-        
-        # stel een titel in
-        plt.suptitle(self.testid)
+            ax.tick_params(which='major', color='black')
+            ax.tick_params(which='minor', color='black')
+
+            ax.grid(which='major', linestyle='-', linewidth='0.15', color='black')
+            ax.grid(which='minor', linestyle='-', linewidth='0.1')
+            ax.grid(b=True, which='both')
+
         # sla de figuur op
         plt.savefig(fname=f"./output/{self.filename}.png")
         plt.close('all')
 
-        # andere optie
+        # andere optie voor bestandsnaam
         save_as_projectid_fromfile = False
         if save_as_projectid_fromfile:
             if self.projectid is not None: # TODO: dit moet ergens anders. Moet ook projectid uit mapid kunnen halen
