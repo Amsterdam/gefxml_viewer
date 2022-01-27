@@ -310,8 +310,28 @@ class Cpt():
 
         # soms is er geen diepte, maar wel sondeerlengte aanwezig
         # sondeerlengte als diepte gebruiken is goed genoeg als benadering
+        # TODO: onderstaande blok voor diepte correctie is niet gecheckt op correctheid 
+        # TODO: vraag me af of het gebruik hiervan ooit mogelijk / nodig is, want indien de hoek gemeten is, dan is meestal ook de gecorrigeerde diepte gerapporteerd
         elif "penetrationLength" in self.data.columns:
-            self.data["depth"] = self.data["penetrationLength"].abs()
+            if "inclinationResultant" in self.data.columns:
+                self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+            elif "inclinationEW" in self.data.columns and "inclinationNS" in self.data.columns:
+                z = self.data["penetrationLength"].diff().abs()
+                x = z * np.tan(np.deg2rad(self.data["inclinationEW"]))
+                y = z * np.tan(np.deg2rad(self.data["inclinationNS"]))
+                self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
+                self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+            elif "inclinationX" and "inclinationY" in self.data.columns:
+                z = self.data["penetrationLength"].diff().abs()
+                x = z * np.tan(np.deg2rad(self.data["inclinationX"]))
+                y = z * np.tan(np.deg2rad(self.data["inclinationY"]))
+                self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
+                self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+            else:
+                self.data["depth"] = self.data["penetrationLength"].abs()
 
         # nan waarden geven vervelende strepen in de afbeeldingen
         self.data.dropna(subset=["depth", "coneResistance", "localFriction", "frictionRatio"], inplace=True)
