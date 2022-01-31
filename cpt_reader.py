@@ -586,7 +586,7 @@ class Bore():
         # voeg verdeling componenten toe
         # van https://github.com/cemsbv/pygef/blob/master/pygef/broxml.py
         material_components = ["gravel_component", "sand_component", "clay_component", "loam_component", "peat_component", "silt_component"]
-        soil_names_dict = {
+        soil_names_dict_lists = {
             "betonOngebroken": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # specialMaterial
             "keitjes": [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             "klei": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
@@ -611,9 +611,11 @@ class Bore():
             "zwakZandigeKlei": [0.0, 0.1, 0.9, 0.0, 0.0, 0.0],
             "zwakZandigeKleiMetGrind": [0.05, 0.1, 0.85, 0.0, 0.0, 0.0],
         }
-
-        self.soillayers["components"] = self.soillayers["soilName"].map(soil_names_dict)
-
+        # voor sorteren op bijdrage is het handiger om een dictionary te maken
+        soil_names_dict_dicts = {}
+        for key, value in soil_names_dict_lists.items():
+            soil_names_dict_dicts[key] = dict(sorted({v: i for i, v in enumerate(value)}.items(), reverse=True))
+        self.soillayers["components"] = self.soillayers["soilName"].map(soil_names_dict_dicts)
 
         # voeg een plotkleur toe
         colorsDict = {"zand": "yellow", "veen": "brown", "klei": "green", "grind": "orange", "silt": "blue"}
@@ -660,16 +662,16 @@ class Bore():
         
         # maak een diagram met primaire en secundaire componenten
         # TODO: dit is een samenraapsel van code van hiervoor, dit moet opgeruimd
-        # TODO: de materialen moeten gesorteerd op grootte van bijdrage aan totaal samenstelling
         fig, ax = plt.subplots(figsize=(10,5))
         components = list(self.soillayers["components"])
         colorsDict = {1: "yellow", 4: "brown", 2: "green", 0: "orange", 5: "blue", 3: "purple"}
         hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "xxx", 3:""}
         for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
             left = 0
-            for i, comp in enumerate(component):
-                barPlot = ax.barh(lower, width=comp, left=left, height=upper-lower, color=colorsDict[i], hatch=hatchesDict[i], edgecolor="black", align="edge")
+            for comp, nr in component.items():
+                barPlot = ax.barh(lower, width=comp, left=left, height=upper-lower, color=colorsDict[nr], hatch=hatchesDict[nr], edgecolor="black", align="edge")
                 left += comp
+        plt.suptitle(self.testid)
         plt.show()
         plt.close()
 
