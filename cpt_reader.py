@@ -358,6 +358,8 @@ class Cpt():
         y_maaiveld = [self.groundlevel, self.groundlevel]
 
         # figuur met twee grafieken
+        # TODO: dit kunnen we ook op dezelfde manier doen als bij de boringen, zodat de verticale schaal altijd hetzelfde is
+        # TODO: dat is wel lastiger met pdf maken
         fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(18,24), sharey=True, gridspec_kw = {'width_ratios':[5, 1, 1, 1, 1]})
 
         axes[0].plot(self.data['coneResistance'], y, label='qc [MPa]', linewidth=1.25, color='#4b0082')
@@ -393,7 +395,8 @@ class Cpt():
         # Plot top datablock with CPT information
         plt.suptitle(f'CPT: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nz-coördinaat: {self.groundlevel}\n', x=0.15, y=0.09, ha='left', fontsize=14, fontweight='bold')
         fig.supxlabel(f'Uitvoerder: {self.companyid}\nDatum: {self.reportdate}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', y=0.05 , ha='left', va='bottom', fontsize=14, fontweight='bold')
-        # Plot bottom datablock with general information
+        # Plot datablock with general information
+        # TODO: positie is verkeerd
         plt.title('Ingenieursbureau\n Gemeente Amsterdam\n Vakgroep Geotechniek\n Python ', loc='left', fontsize=13.5)
 
         for ax in axes:
@@ -408,6 +411,7 @@ class Cpt():
             ax.grid(b=True, which='both')
 
         # sla de figuur op
+        plt.tight_layout()
         plt.savefig(fname=f"./output/{self.filename}.png")
         plt.close('all')
 
@@ -441,9 +445,9 @@ class Bore():
         # lees een boring in vanuit een BRO XML
         testid_pattern_broid = re.compile(r'<broId>\s*(?P<testid>.*)</broId>')
         testid_pattern_accountableparty = re.compile(r'<objectIdAccountableParty>\s*(?P<testid>.*)</objectIdAccountableParty>')
-        xy_id_pattern_crs_first = re.compile(r'<.*:Point\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)"\s*.*:id="BRO_0001">\s*' +
+        xy_id_pattern_crs_first = re.compile(r'<.*:Point\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)"\s*.*:id=".*">\s*' +
                         r'<.*:pos>(?P<X>\d*.?\d*)\s*(?P<Y>\d*.?\d*)</.*:pos>')
-        xy_id_pattern_id_first = re.compile(r'<.*:Point\s*.*:id="BRO_0001"\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)">\s*' +
+        xy_id_pattern_id_first = re.compile(r'<.*:Point\s*.*:id=".*"\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)">\s*' +
                         r'<.*:pos>(?P<X>\d*.?\d*)\s*(?P<Y>\d*.?\d*)</.*:pos>')
         z_id_pattern = re.compile(r'<.*:offset uom="(?P<z_unit>.*)">(?P<Z>.*)</.*:offset>')
         trajectory_pattern = re.compile(r'<.*:finalDepthBoring uom="m">(?P<finalDepth>\d*.?\d*)</.*:finalDepthBoring>')
@@ -646,34 +650,27 @@ class Bore():
         colors = list(self.soillayers["plotColor"])
         hatches = list(self.soillayers["plotHatch"])
 
-        # maak een staafdiagram
-        for upper, lower, color, hatch, label in reversed(list(zip(uppers, lowers, colors, hatches, labels))):
-            barPlot = ax.barh(lower, width=1, height=upper-lower, color=color, hatch=hatch, edgecolor="black", align="edge")
-
-            # voeg labels toe met de materiaalnaam
-            # TODO: positie moet beter
-            for rect in barPlot:
-                height = rect.get_height()
-                ax.text(rect.get_x() + rect.get_width(), height,
-                        label,
-                        ha='left', va='bottom')
-        plt.show()
-        plt.close()
-        
         # maak een diagram met primaire en secundaire componenten
         # TODO: dit is een samenraapsel van code van hiervoor, dit moet opgeruimd
-        fig, ax = plt.subplots(figsize=(10,5))
+        fig, ax = plt.subplots(nrows=2, ncols=1, figsize=(6, self.finaldepth + 2), gridspec_kw = {'height_ratios':[self.finaldepth, 2]})
         components = list(self.soillayers["components"])
         colorsDict = {1: "yellow", 4: "brown", 2: "green", 0: "orange", 5: "blue", 3: "purple"}
         hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "xxx", 3:""}
         for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
             left = 0
             for comp, nr in component.items():
-                barPlot = ax.barh(lower, width=comp, left=left, height=upper-lower, color=colorsDict[nr], hatch=hatchesDict[nr], edgecolor="black", align="edge")
+                barPlot = ax[0].barh(lower, width=comp, left=left, height=upper-lower, color=colorsDict[nr], hatch=hatchesDict[nr], edgecolor="black", align="edge")
                 left += comp
-        plt.suptitle(self.testid)
-        plt.show()
-        plt.close()
 
+        ax[0].set_ylim([self.groundlevel - self.finaldepth, self.groundlevel])
+        ax[0].set_xticks([])
+        ax[0].set_ylabel('diepte [m t.o.v. NAP]')
+
+        # verberg de assen van de tweede plot zodat deze gebruikt kan worden voor een stempel
+        ax[1].set_axis_off()
+        plt.title(f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\n', x=0.05, y=0.09, ha='left', fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        plt.savefig(fname=f'./output/{self.testid}.png')
+        plt.close('all')
 
         # TODO: toevoegen van specialMaterial?
