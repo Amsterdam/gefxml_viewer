@@ -357,7 +357,7 @@ class Cpt():
         x_maaiveld = [0, 10]
         y_maaiveld = [self.groundlevel, self.groundlevel]
 
-        # figuur met twee grafieken
+        # figuur met conusweerstand, wrijving, wrijvingsgetal, helling en waterspanning
         # TODO: dit kunnen we ook op dezelfde manier doen als bij de boringen, zodat de verticale schaal altijd hetzelfde is
         # TODO: dat is wel lastiger met pdf maken
         fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(18,24), sharey=True, gridspec_kw = {'width_ratios':[5, 1, 1, 1, 1]})
@@ -396,7 +396,7 @@ class Cpt():
         plt.suptitle(f'CPT: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nz-coördinaat: {self.groundlevel}\n', x=0.15, y=0.09, ha='left', fontsize=14, fontweight='bold')
         fig.supxlabel(f'Uitvoerder: {self.companyid}\nDatum: {self.reportdate}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', y=0.05 , ha='left', va='bottom', fontsize=14, fontweight='bold')
         # Plot datablock with general information
-        # TODO: positie is verkeerd
+        # TODO: positie van plt.title is verkeerd
         plt.title('Ingenieursbureau\n Gemeente Amsterdam\n Vakgroep Geotechniek\n Python ', loc='left', fontsize=13.5)
 
         for ax in axes:
@@ -621,20 +621,6 @@ class Bore():
             soil_names_dict_dicts[key] = dict(sorted({v: i for i, v in enumerate(value)}.items(), reverse=True))
         self.soillayers["components"] = self.soillayers["soilName"].map(soil_names_dict_dicts)
 
-        # voeg een plotkleur toe
-        colorsDict = {"zand": "yellow", "veen": "brown", "klei": "green", "grind": "orange", "silt": "blue"}
-        colors = self.soillayers["soilName"]
-        for soil, color in colorsDict.items():
-            colors = np.where(self.soillayers["soilName"].str.lower().str.endswith(soil), color, colors)
-        self.soillayers["plotColor"] = colors
-
-        # voeg een arcering toe
-        hatchesDict = {"zand": "...", "veen": "---", "klei": "///", "grind": "ooo", "silt": "xxx"}
-        hatches = self.soillayers["soilName"]
-        for soil, hatch in hatchesDict.items():
-            hatches = np.where(self.soillayers["soilName"].str.lower().str.endswith(soil), hatch, hatches)
-        self.soillayers["plotHatch"] = hatches
-
         # voeg kolommen toe met absolute niveaus (t.o.v. NAP)
         self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upper"] 
         self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lower"] 
@@ -646,16 +632,13 @@ class Bore():
 
         uppers = list(self.soillayers["upper_NAP"])
         lowers = list(self.soillayers["lower_NAP"])
-        labels = list(self.soillayers["soilName"])
-        colors = list(self.soillayers["plotColor"])
-        hatches = list(self.soillayers["plotHatch"])
 
         # maak een diagram met primaire en secundaire componenten
         # TODO: dit is een samenraapsel van code van hiervoor, dit moet opgeruimd
         fig, ax = plt.subplots(nrows=2, ncols=1, figsize=(6, self.finaldepth + 2), gridspec_kw = {'height_ratios':[self.finaldepth, 2]})
         components = list(self.soillayers["components"])
-        colorsDict = {1: "yellow", 4: "brown", 2: "green", 0: "orange", 5: "blue", 3: "purple"}
-        hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "xxx", 3:""}
+        colorsDict = {1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple"}
+        hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "\\\\\\", 3:""}
         for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
             left = 0
             for comp, nr in component.items():
