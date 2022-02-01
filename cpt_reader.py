@@ -360,7 +360,18 @@ class Cpt():
         # figuur met conusweerstand, wrijving, wrijvingsgetal, helling en waterspanning
         # TODO: dit kunnen we ook op dezelfde manier doen als bij de boringen, zodat de verticale schaal altijd hetzelfde is
         # TODO: dat is wel lastiger met pdf maken
-        fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(18,24), sharey=True, gridspec_kw = {'width_ratios':[5, 1, 1, 1, 1]})
+
+        fig = plt.figure(figsize=(18,24))
+        gs = GridSpec(2, 5, height_ratios=[10,1], width_ratios=[5, 1, 1, 1, 1] , figure=fig)
+        
+        axes = []
+        for i in range(5):
+            if i == 0:
+                axes.append(fig.add_subplot(gs[0, i])) 
+            else:    
+                axes.append(fig.add_subplot(gs[0, i], sharey=axes[0]))
+
+        axes.append(fig.add_subplot(gs[1,:]))
 
         axes[0].plot(self.data['coneResistance'], y, label='qc [MPa]', linewidth=1.25, color='#4b0082')
         axes[1].plot(self.data["localFriction"], y, label='fs [MPa]', linewidth=1.25, color='blue')
@@ -392,12 +403,10 @@ class Cpt():
         axes[0].set_xlim([0, 40])
         axes[2].set_xlim([0, 12])
 
-        # Plot top datablock with CPT information
-        plt.suptitle(f'CPT: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nz-coördinaat: {self.groundlevel}\n', x=0.15, y=0.09, ha='left', fontsize=14, fontweight='bold')
-        fig.supxlabel(f'Uitvoerder: {self.companyid}\nDatum: {self.reportdate}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', y=0.05 , ha='left', va='bottom', fontsize=14, fontweight='bold')
-        # Plot datablock with general information
-        # TODO: positie van plt.title is verkeerd
-        plt.title('Ingenieursbureau\n Gemeente Amsterdam\n Vakgroep Geotechniek\n Python ', loc='left', fontsize=13.5)
+        axes[-1].set_axis_off()
+        plt.text(0.05, 0.6, f'Sondering: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\n', ha='left', va='top', fontsize=14, fontweight='bold')
+        plt.text(0.25, 0.6, f'Uitvoerder: {self.companyid}\nDatum: {self.reportdate}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', ha='left', va='top', fontsize=14, fontweight='bold')
+        plt.text(0.05, 0, 'Ingenieursbureau Gemeente Amsterdam Vakgroep Geotechniek Python ', fontsize=13.5)
 
         for ax in axes:
 
