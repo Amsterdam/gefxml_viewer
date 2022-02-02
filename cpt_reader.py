@@ -361,7 +361,7 @@ class Cpt():
         # TODO: dit kunnen we ook op dezelfde manier doen als bij de boringen, zodat de verticale schaal altijd hetzelfde is
         # TODO: dat is wel lastiger met pdf maken
 
-        fig = plt.figure(figsize=(18,24))
+        fig = plt.figure(figsize=(8.3 * 2,11.7 * 2)) # 8.3 x 11.7 inch is een A4
         gs = GridSpec(2, 5, height_ratios=[10,1], width_ratios=[5, 1, 1, 1, 1] , figure=fig)
         
         axes = []
@@ -635,31 +635,50 @@ class Bore():
         self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lower"] 
 
     def plot(self):
-        # maak een eenvoudige plot van een boring, alleen het hoofdmateriaal
-        # TODO: dit moet met secundair (en tertiair) materiaal
-        fig, ax = plt.subplots(figsize=(10,5))
-
+        # maak een eenvoudige plot van een boring
         uppers = list(self.soillayers["upper_NAP"])
         lowers = list(self.soillayers["lower_NAP"])
 
         # maak een diagram met primaire en secundaire componenten
-        # TODO: dit is een samenraapsel van code van hiervoor, dit moet opgeruimd
-        fig, ax = plt.subplots(nrows=2, ncols=1, figsize=(6, self.finaldepth + 2), gridspec_kw = {'height_ratios':[self.finaldepth, 2]})
+        fig = plt.figure(figsize=(6, self.finaldepth + 2)) 
+        gs = GridSpec(2, 2, height_ratios=[self.finaldepth, 2], width_ratios=[2, 1] , figure=fig)
+        
+        axes = []
+        axes.append(fig.add_subplot(gs[0, 0]))
+        axes.append(fig.add_subplot(gs[0, 1], sharey=axes[0]))
+        axes.append(fig.add_subplot(gs[1,:]))
+
         components = list(self.soillayers["components"])
         colorsDict = {1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple"}
         hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "\\\\\\", 3:""}
         for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
             left = 0
             for comp, nr in component.items():
-                barPlot = ax[0].barh(lower, width=comp, left=left, height=upper-lower, color=colorsDict[nr], hatch=hatchesDict[nr], edgecolor="black", align="edge")
+                barPlot = axes[0].barh(lower, width=comp, left=left, height=upper-lower, color=colorsDict[nr], hatch=hatchesDict[nr], edgecolor="black", align="edge")
                 left += comp
 
-        ax[0].set_ylim([self.groundlevel - self.finaldepth, self.groundlevel])
-        ax[0].set_xticks([])
-        ax[0].set_ylabel('diepte [m t.o.v. NAP]')
+        axes[0].set_ylim([self.groundlevel - self.finaldepth, self.groundlevel])
+        axes[0].set_xticks([])
+        axes[0].set_ylabel('diepte [m t.o.v. NAP]')
 
-        # verberg de assen van de tweede plot zodat deze gebruikt kan worden voor een stempel
-        ax[1].set_axis_off()
+        # voeg de beschrijving toe
+        for layer in self.soillayers.itertuples():
+            y = (getattr(layer, "lower_NAP") + getattr(layer, "upper_NAP")) / 2
+            for materialproperties in ["clayproperties", "sandproperties", "peatproperties"]:
+                try:
+                    properties = getattr(layer, materialproperties)
+                    propertiesText = ""
+                    for key, value in properties.items():
+                        propertiesText += f', {value}'
+                except:
+                    pass
+            text = f'{getattr(layer, "soilName")}{propertiesText}'
+            axes[1].text(0, y, text)
+
+
+        # verberg de assen van de onderste plot en rechtse plot zodat deze gebruikt kunnen worden voor tekst
+        axes[1].set_axis_off()
+        axes[2].set_axis_off()
         plt.title(f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\n', x=0.05, y=0.09, ha='left', fontsize=14, fontweight='bold')
         plt.tight_layout()
         plt.savefig(fname=f'./output/{self.testid}.png')
