@@ -7,6 +7,7 @@ Geschreven door Thomas van der Linden, Ingenieursbureau Amsterdam
 """
 
 from ctypes import alignment
+from dataclasses import dataclass
 from typing import List
 import pandas as pd
 from io import StringIO
@@ -16,6 +17,7 @@ from matplotlib.gridspec import GridSpec
 import matplotlib.pyplot as plt
 from datetime import date, datetime
 
+@dataclass
 class Cpt():
     def __init__(self):
         self.easting = None
@@ -37,15 +39,18 @@ class Cpt():
         filename_pattern = re.compile(r'(.*[\\/])*(?P<filename>.*)\.')
         testid_pattern = re.compile(r'<.*:broId>\s*(?P<testid>.*)</.*:broId>')
         objectid_pattern = re.compile(r'<.*:objectIdAccountableParty>\s*(?P<testid>.*)\s*</.*:objectIdAccountableParty>')
-        xy_id_pattern = re.compile(r'<.*:location srsName="urn:ogc:def:crs:EPSG::28992"\s*.*\d*?:id="BRO_\d*">\s*' + 
-                                        r'<.*\d*?:pos>(?P<X>\d*.?\d*)\s*(?P<Y>\d*.?\d*)</.*\d*?:pos>')
-        z_id_pattern = re.compile(r'<.*:offset uom="(?P<z_unit>.*)">(?P<Z>-?\d*.?\d*)</.*:offset>')
-        trajectory_pattern = re.compile(r'<.*:finalDepth uom="m">(?P<finalDepth>\d*.?\d*)</.*:finalDepth>\s')
+
+        # TODO: dit gaat niet goed met een CPT van de BRO XML van de waterkering Strandeiland Zuid. Geen idee waar de fout zit.
+        xy_id_pattern = re.compile(r'<.*:location\s*(.*\d*:id="BRO_\d*")?\s*srsName="urn:ogc:def:crs:EPSG::28992"\s*(.*\d*:id="BRO_\d*")?>\s*' +
+                                        r'<.*\d*:pos>(?P<X>\d*\.?\d*)\s*(?P<Y>\d*\.?\d*)</.*\d*:pos>')
+        
+        z_id_pattern = re.compile(r'<.*:offset uom="(?P<z_unit>.*)">(?P<Z>-?\d*\.?\d*)</.*:offset>')
+        trajectory_pattern = re.compile(r'<.*:finalDepth uom="m">(?P<finalDepth>\d*\.?\d*)</.*:finalDepth>\s')
         report_date_pattern = re.compile(r'<.*:researchReportDate>\s*<.*:date>(?P<report_date>\d*-\d*-\d*)</.*:date>')
         removed_layer_pattern = re.compile(r'<.*:removedLayer>\s*'+ 
                                                 r'<.*:sequenceNumber>(?P<layerNr>\d*)</.*:sequenceNumber>\s*' + 
-                                                r'<.*:upperBoundary uom="m">(?P<layerUpper>\d*.?\d*)</.*:upperBoundary>\s*' + 
-                                                r'<.*:lowerBoundary uom="m">(?P<layerLower>\d*.?\d*)</.*:lowerBoundary>\s*' + 
+                                                r'<.*:upperBoundary uom="m">(?P<layerUpper>\d*\.?\d*)</.*:upperBoundary>\s*' + 
+                                                r'<.*:lowerBoundary uom="m">(?P<layerLower>\d*\.?\d*)</.*:lowerBoundary>\s*' + 
                                                 r'<.*:description>(?P<layerDescription>.*)</.*:description>\s*' + 
                                             r'</.*:removedLayer>\s*')
         data_pattern = re.compile(r'<.*:values>(?P<data>.*)</.*:values>')
@@ -62,8 +67,10 @@ class Cpt():
             match = re.search(xy_id_pattern, xml_raw)
             self.easting = float(match.group('X'))
             self.northing = float(match.group('Y'))
-            self.srid = match.group('coordsys')
+#            self.srid = match.group('coordsys') # TODO: dit moet worden toegevoegd.
+            print('wel xy')
         except:
+            print('geen xy')
             pass
         try:
             match = re.search(z_id_pattern, xml_raw)
@@ -434,7 +441,7 @@ class Cpt():
                 plt.savefig(fname=f"./output/{self.projectname}_{self.testid}.png")
                 plt.close('all')
 
-
+@dataclass
 class Bore():
     def __init__(self):
         self.easting = None
@@ -460,7 +467,8 @@ class Bore():
                         r'<.*:pos>(?P<X>\d*.?\d*)\s*(?P<Y>\d*.?\d*)</.*:pos>')
         z_id_pattern = re.compile(r'<.*:offset uom="(?P<z_unit>.*)">(?P<Z>.*)</.*:offset>')
         trajectory_pattern = re.compile(r'<.*:finalDepthBoring uom="m">(?P<finalDepth>\d*.?\d*)</.*:finalDepthBoring>')
-        report_date_pattern = re.compile(r'<.*:descriptionReportDate>\s*<date>(?P<report_date>\d*-\d*-\d*)</date>')
+        report_date_pattern = re.compile(r'<.*:descriptionReportDate>\s*<date>(?P<reportDate>\d*-\d*-\d*)</date>')
+        description_quality_pattern = re.compile(r'<.*:descriptionQuality\s*codeSpace="urn:bro:bhrgt:DescriptionQuality">(?P<descriptionQuality>.*)</')
 
         # TODO: dit kan worden opgesplitst, maar dan raak je wel de samenhang kwijt
         # TODO: met """ i.p.v. ' ' + ' '
@@ -537,13 +545,18 @@ class Bore():
             pass
         try:
             match = re.search(report_date_pattern, xml_raw)
-            reportdateString = match.group('report_date')
+            reportdateString = match.group('reportDate')
             self.reportdate = datetime.strptime(reportdateString, '%Y-%m-%d')
         except:
             pass
         try:
             match = re.search(trajectory_pattern, xml_raw)
             self.finaldepth = float(match.group('finalDepth'))
+        except:
+            pass
+        try:
+            match = re.search(description_quality_pattern, xml_raw)
+            self.descriptionquality = match.group('descriptionQuality')
         except:
             pass
         try:
@@ -673,13 +686,13 @@ class Bore():
                 except:
                     pass
             text = f'{getattr(layer, "soilName")}{propertiesText}'
-            axes[1].text(0, y, text)
+            axes[1].text(0, y, text, wrap=True)
 
 
         # verberg de assen van de onderste plot en rechtse plot zodat deze gebruikt kunnen worden voor tekst
         axes[1].set_axis_off()
         axes[2].set_axis_off()
-        plt.title(f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\n', x=0.05, y=0.09, ha='left', fontsize=14, fontweight='bold')
+        plt.title(f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\nkwaliteit: {self.descriptionquality}', x=0.05, y=0.09, ha='left', fontsize=14, fontweight='bold')
         plt.tight_layout()
         plt.savefig(fname=f'./output/{self.testid}.png')
         plt.close('all')
