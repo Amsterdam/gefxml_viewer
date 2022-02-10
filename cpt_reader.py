@@ -6,6 +6,7 @@ Geschreven door Thomas van der Linden, Ingenieursbureau Amsterdam
 19 oktober 2021
 """
 
+from asyncio.proactor_events import _ProactorSocketTransport
 from ctypes import alignment
 from dataclasses import dataclass
 from typing import List
@@ -408,7 +409,7 @@ class Cpt():
 
         axes[-1].set_axis_off()
         plt.text(0.05, 0.6, f'Sondering: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\n', ha='left', va='top', fontsize=14, fontweight='bold')
-        plt.text(0.25, 0.6, f'Uitvoerder: {self.companyid}\nDatum: {self.reportdate}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', ha='left', va='top', fontsize=14, fontweight='bold')
+        plt.text(0.35, 0.6, f'Uitvoerder: {self.companyid}\nDatum: {self.reportdate}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', ha='left', va='top', fontsize=14, fontweight='bold')
         plt.text(0.05, 0, 'Ingenieursbureau Gemeente Amsterdam Vakgroep Geotechniek Python ', fontsize=13.5)
 
         for ax in axes:
@@ -643,6 +644,179 @@ class Bore():
         self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upper"] 
         self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lower"] 
 
+    def load_gef(self, gefFile):
+
+        self.columninfo = {}
+        self.columnvoid_values = {}
+        self.descriptionquality = str() # TODO
+
+        GEF_COLINFO = { 
+            '1': 'upper',
+            '2': 'lower'
+        }
+
+        test_id_pattern = re.compile(r'#TESTID\s*=\s*(?P<testid>.*)\s*')
+        xy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<refsystem>\d*),\s*(?P<X>\d*\.?\d*),\s*(?P<Y>\d*\.?\d*)(,\s*(?P<dX>\d*\.?\d*),\s*(?P<dY>\d*\.?\d*))?\s*')
+        z_id_pattern = re.compile(r'#ZID\s*=\s*(?P<refsystem>\d*),\s*(?P<Z>\d*\.?\d*)(,\s*(?P<dZ>\d*\.?\d*))')
+
+        data_pattern = re.compile(r'#EOH\s*=\s*(?P<data>(.*\n)*)')
+
+        columnvoid_pattern = re.compile(r'#COLUMNVOID\s*=\s*(?P<columnnr>\d*),\s*(?P<voidvalue>.*)\s*')
+        columninfo_pattern = re.compile(r'#COLUMNINFO\s*=\s*(?P<columnnr>\d*),\s*(?P<unit>.*),\s*(?P<parameter>.*),\s*(?P<quantitynr>\d*)\s*')
+        columnseparator_pattern = re.compile(r'#COLUMNSEPARATOR\s*=\s*(?P<columnseparator>.*)')
+        recordseparator_pattern = re.compile(r'#RECORDSEPARATOR\s*=\s*(?P<recordseparator>.*)')
+
+        with open(gefFile) as f:
+            gef_raw = f.read()
+
+        try:
+            match = re.search(test_id_pattern, gef_raw)
+            self.testid = match.group('testid')
+        except:
+            pass
+
+        try:
+            match = re.search(xy_id_pattern, gef_raw)
+            self.easting = float(match.group('X'))
+            self.northing = float(match.group('Y'))
+        except:
+            pass
+        try:
+            match = re.search(z_id_pattern, gef_raw)
+            self.groundlevel = float(match.group('Z'))
+        except:
+            pass
+        try:
+            match = re.search(data_pattern, gef_raw)
+            self.soillayers = match.group('data')
+        except:
+            pass
+        try:
+            match = re.search(columnseparator_pattern, gef_raw)
+            self.columnseparator = match.group('columnseparator')
+        except:
+            pass
+        try:
+            match = re.search(recordseparator_pattern, gef_raw)
+            self.recordseparator = match.group('recordseparator')
+        except:
+            pass
+        try:
+            matches = re.finditer(columnvoid_pattern, gef_raw)
+            for match in matches:
+                columnnr = match.group('columnnr')
+                voidvalue = match.group('voidvalue')
+                self.columnvoid_values[int(columnnr) - 1] = float(voidvalue)
+        except:
+            pass
+        try:
+            # informatie in kolommen kan meerdere namen hebben
+            # nummers zijn wel gestandardiseerd
+            matches = re.finditer(columninfo_pattern, gef_raw)
+            for match in matches:
+                columnnr = match.group('columnnr')
+                quantitynr = match.group('quantitynr')
+                # kolomnummers in pandas starten op 0, in gef op 1 
+                self.columninfo[int(columnnr) - 1] = GEF_COLINFO[quantitynr]
+        except:
+            pass
+        
+        # zet de data om in een dataframe, dan kunnen we er wat mee    
+        self.soillayers = pd.read_csv(StringIO(self.soillayers), sep=self.columnseparator, skipinitialspace=True, header=None)
+        
+        # vervang de dummy waarden door nan
+        for columnnr, voidvalue in self.columnvoid_values.items():
+            self.soillayers[columnnr] = self.soillayers[columnnr].replace(voidvalue, np.nan)
+
+        # TODO: deze namen kloppen wellicht niet helemaal
+        self.columninfo[max(self.columninfo.keys()) + 1] = 'soilName'
+        self.columninfo[max(self.columninfo.keys()) + 1] = 'toelichting'
+        self.columninfo[max(self.columninfo.keys()) + 1] = 'materialproperties'
+
+        # geef de kolommen andere namen
+        self.soillayers = self.soillayers.rename(columns=self.columninfo)
+
+        self.soillayers = self.soillayers.replace("'", "", regex=True)
+
+        # voeg niveaus t.o.v. NAP toe
+        self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upper"] 
+        self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lower"] 
+
+        # geef de maximaal diepte t.o.v. maaiveld
+        self.finaldepth = self.soillayers["upper_NAP"].max() - self.soillayers["lower_NAP"].min()
+
+        # zet de codering om in iets dat geplot kan worden
+        material_pattern = re.compile(r'(?P<main>[GKLSVZ])(?P<second>[ghklsvz])?(?P<secondQuantity>\d)?(?P<third>[ghklsvz])?(?P<thirdQuantity>\d)?(?P<fourth>[ghklsvz])?(?P<fourthQuantity>\d)?')
+
+        components = []
+        for row in self.soillayers.itertuples():
+            componentsRow = {}
+            material = getattr(row, 'soilName')
+            match = re.search(material_pattern, material)
+            main = match.group('main')
+
+            try:
+                match = re.search(material_pattern, material)
+                second = match.group('second')
+                secondQuantity = 0.05
+            except:
+                pass
+
+            try:
+                match = re.search(material_pattern, material)
+                third = match.group('third')
+                thirdQuantity = 0.
+            except:
+                pass
+
+            try:
+                match = re.search(material_pattern, material)
+                fourth = match.group('fourth')
+                fourthQuantity = 0.
+            except:
+                pass
+
+            try:
+                match = re.search(material_pattern, material)
+                secondQuantity = int(match.group('secondQuantity')) * 0.05
+            except:
+                pass
+
+            try:
+                match = re.search(material_pattern, material)
+                thirdQuantity = int(match.group('thirdQuantity')) * 0.049
+            except:
+                pass
+
+            try:
+                match = re.search(material_pattern, material)
+                fourthQuantity = int(match.group('fourthQuantity')) * 0.048
+            except:
+                pass
+
+            mainQuantity = 1 - secondQuantity - thirdQuantity - fourthQuantity
+
+            material_components = {"G": 0, "Z": 1, "K": 2, "S": 3, "V": 4, "L": 5, "H": 4}
+
+            componentsRow[mainQuantity] = material_components[main]
+            try:
+                componentsRow[secondQuantity] = material_components[second.upper()]
+            except:
+                pass
+            try:
+                componentsRow[thirdQuantity] = material_components[third.upper()]
+            except:
+                pass
+
+            try:
+                componentsRow[fourthQuantity] = material_components[fourth.upper()]
+            except:
+                pass
+
+            components.append(componentsRow)
+        self.soillayers["components"] = components
+
+
     def plot(self):
         # maak een eenvoudige plot van een boring
         uppers = list(self.soillayers["upper_NAP"])
@@ -673,7 +847,7 @@ class Bore():
         # voeg de beschrijving toe
         for layer in self.soillayers.itertuples():
             y = (getattr(layer, "lower_NAP") + getattr(layer, "upper_NAP")) / 2
-            for materialproperties in ["clayproperties", "sandproperties", "peatproperties"]:
+            for materialproperties in ["clayproperties", "sandproperties", "peatproperties", "materialproperties"]:
                 try:
                     properties = getattr(layer, materialproperties)
                     propertiesText = ""
