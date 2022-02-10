@@ -39,11 +39,8 @@ class Cpt():
         filename_pattern = re.compile(r'(.*[\\/])*(?P<filename>.*)\.')
         testid_pattern = re.compile(r'<.*:broId>\s*(?P<testid>.*)</.*:broId>')
         objectid_pattern = re.compile(r'<.*:objectIdAccountableParty>\s*(?P<testid>.*)\s*</.*:objectIdAccountableParty>')
-
-        # TODO: dit gaat niet goed met een CPT van de BRO XML van de waterkering Strandeiland Zuid. Geen idee waar de fout zit.
         xy_id_pattern = re.compile(r'<.*:location\s*(.*\d*:id="BRO_\d*")?\s*srsName="urn:ogc:def:crs:EPSG::28992"\s*(.*\d*:id="BRO_\d*")?>\s*' +
                                         r'<.*\d*:pos>(?P<X>\d*\.?\d*)\s*(?P<Y>\d*\.?\d*)</.*\d*:pos>')
-        
         z_id_pattern = re.compile(r'<.*:offset uom="(?P<z_unit>.*)">(?P<Z>-?\d*\.?\d*)</.*:offset>')
         trajectory_pattern = re.compile(r'<.*:finalDepth uom="m">(?P<finalDepth>\d*\.?\d*)</.*:finalDepth>\s')
         report_date_pattern = re.compile(r'<.*:researchReportDate>\s*<.*:date>(?P<report_date>\d*-\d*-\d*)</.*:date>')
@@ -68,9 +65,7 @@ class Cpt():
             self.easting = float(match.group('X'))
             self.northing = float(match.group('Y'))
 #            self.srid = match.group('coordsys') # TODO: dit moet worden toegevoegd.
-            print('wel xy')
         except:
-            print('geen xy')
             pass
         try:
             match = re.search(z_id_pattern, xml_raw)
@@ -127,6 +122,7 @@ class Cpt():
         
         self.data = pd.read_csv(StringIO(self.data), names=dataColumns, sep=",", lineterminator=';')
         self.data = self.data.replace(-999999, np.nan)
+        self.data.sort_values(by="depth", inplace=True)
 
     def load_gef(self, gefFile):
         self.columnvoid_values = {}
