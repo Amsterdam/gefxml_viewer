@@ -306,6 +306,7 @@ class Cpt():
                 self.data["frictionRatio"] = 100 * self.data["localFriction"] / self.data["coneResistance"]
             # anders is de waarde 0, ten behoeve van plot
             else:
+                self.data["localFriction"] = 0
                 self.data["frictionRatio"] = 0
         # soms is de ingelezen diepte positief en soms negatief
         # moet positief zijn 
@@ -796,7 +797,7 @@ class Bore():
 
             mainQuantity = 1 - secondQuantity - thirdQuantity - fourthQuantity
 
-            material_components = {"G": 0, "Z": 1, "K": 2, "S": 3, "V": 4, "L": 5, "H": 4}
+            material_components = {"G": 0, "Z": 1, "K": 2, "S": 5, "V": 4, "L": 3, "H": 4}
 
             componentsRow[mainQuantity] = material_components[main]
             try:
