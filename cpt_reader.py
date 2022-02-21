@@ -843,7 +843,7 @@ class Bore():
         axes.append(fig.add_subplot(gs[1,:]))
 
         components = list(self.soillayers["components"])
-        colorsDict = {1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple", 999: "white"}
+        colorsDict = {1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple", 999: "black"}
         hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "\\\\\\", 3:""}
         for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
             left = 0
