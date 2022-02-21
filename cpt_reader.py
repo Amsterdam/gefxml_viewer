@@ -6,8 +6,6 @@ Geschreven door Thomas van der Linden, Ingenieursbureau Amsterdam
 19 oktober 2021
 """
 
-from asyncio.proactor_events import _ProactorSocketTransport
-from ctypes import alignment
 from dataclasses import dataclass
 from typing import List
 import pandas as pd
@@ -17,6 +15,8 @@ import re
 from matplotlib.gridspec import GridSpec
 import matplotlib.pyplot as plt
 from datetime import date, datetime
+from shapely.geometry import Point
+import geopandas as gpd
 
 @dataclass
 class Cpt():
@@ -210,6 +210,14 @@ class Cpt():
             self.srid = match.group('coordsys')
         except:
             pass
+
+        # check oude RD-coördinaten
+        if self.easting < 0:
+            geometry = Point([self.easting, self.northing])
+            reprojectedGeometry = gpd.GeoSeries(geometry, crs="epsg:28991").to_crs("epsg:28992")
+            self.easting = reprojectedGeometry.x
+            self.northing = reprojectedGeometry.y
+
         try:
             match = re.search(zdz_id_pattern, gef_raw)
             self.groundlevel = float(match.group('Z'))
@@ -658,6 +666,7 @@ class Bore():
 
         test_id_pattern = re.compile(r'#TESTID\s*=\s*(?P<testid>.*)\s*')
         xy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<refsystem>\d*),\s*(?P<X>\d*\.?\d*),\s*(?P<Y>\d*\.?\d*)(,\s*(?P<dX>\d*\.?\d*),\s*(?P<dY>\d*\.?\d*))?\s*')
+        xydxdy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<coordsys>\d*)\s*,\s*(?P<X>\d*.?\d*)\s*,\s*(?P<Y>\d*.?\d*)\s*,\s*(?P<dx>\d*.?\d*),\s*(?P<dy>\d*.?\d*)\s*')
         z_id_pattern = re.compile(r'#ZID\s*=\s*(?P<refsystem>\d*),\s*(?P<Z>\d*\.?\d*)(,\s*(?P<dZ>\d*\.?\d*))')
         zdz_id_pattern = re.compile(r'#ZID\s*=\s*(?P<datum>\d*)\s*,\s*(?P<Z>.*)\s*,\s*(?P<dZ>.*)\s*')
         
@@ -683,6 +692,20 @@ class Bore():
             self.northing = float(match.group('Y'))
         except:
             pass
+        try:
+            match = re.search(xydxdy_id_pattern, gef_raw)
+            self.easting = float(match.group('X'))
+            self.northing = float(match.group('Y'))
+        except:
+            pass
+
+        # check oude RD-coördinaten
+        if self.easting < 0:
+            geometry = Point([self.easting, self.northing])
+            reprojectedGeometry = gpd.GeoSeries(geometry, crs="epsg:28991").to_crs("epsg:28992")
+            self.easting = reprojectedGeometry.x
+            self.northing = reprojectedGeometry.y
+
         try:
             match = re.search(z_id_pattern, gef_raw)
             self.groundlevel = float(match.group('Z'))
