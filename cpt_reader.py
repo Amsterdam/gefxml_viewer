@@ -659,7 +659,8 @@ class Bore():
         test_id_pattern = re.compile(r'#TESTID\s*=\s*(?P<testid>.*)\s*')
         xy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<refsystem>\d*),\s*(?P<X>\d*\.?\d*),\s*(?P<Y>\d*\.?\d*)(,\s*(?P<dX>\d*\.?\d*),\s*(?P<dY>\d*\.?\d*))?\s*')
         z_id_pattern = re.compile(r'#ZID\s*=\s*(?P<refsystem>\d*),\s*(?P<Z>\d*\.?\d*)(,\s*(?P<dZ>\d*\.?\d*))')
-
+        zdz_id_pattern = re.compile(r'#ZID\s*=\s*(?P<datum>\d*)\s*,\s*(?P<Z>.*)\s*,\s*(?P<dZ>.*)\s*')
+        
         data_pattern = re.compile(r'#EOH\s*=\s*(?P<data>(.*\n)*)')
 
         columnvoid_pattern = re.compile(r'#COLUMNVOID\s*=\s*(?P<columnnr>\d*),\s*(?P<voidvalue>.*)\s*')
@@ -684,6 +685,11 @@ class Bore():
             pass
         try:
             match = re.search(z_id_pattern, gef_raw)
+            self.groundlevel = float(match.group('Z'))
+        except:
+            pass
+        try:
+            match = re.search(zdz_id_pattern, gef_raw)
             self.groundlevel = float(match.group('Z'))
         except:
             pass
@@ -753,8 +759,12 @@ class Bore():
         for row in self.soillayers.itertuples():
             componentsRow = {}
             material = getattr(row, 'soilName')
-            match = re.search(material_pattern, material)
-            main = match.group('main')
+            if 'NBE' not in material:
+                match = re.search(material_pattern, material)
+                main = match.group('main')
+            else:
+                main = 'N'
+                secondQuantity, thirdQuantity, fourthQuantity = 0, 0, 0
 
             try:
                 match = re.search(material_pattern, material)
@@ -797,7 +807,7 @@ class Bore():
 
             mainQuantity = 1 - secondQuantity - thirdQuantity - fourthQuantity
 
-            material_components = {"G": 0, "Z": 1, "K": 2, "S": 5, "V": 4, "L": 3, "H": 4}
+            material_components = {"G": 0, "Z": 1, "K": 2, "S": 5, "V": 4, "L": 3, "H": 4, "N": 999}
 
             componentsRow[mainQuantity] = material_components[main]
             try:
@@ -833,7 +843,7 @@ class Bore():
         axes.append(fig.add_subplot(gs[1,:]))
 
         components = list(self.soillayers["components"])
-        colorsDict = {1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple"}
+        colorsDict = {1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple", 999: "white"}
         hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "\\\\\\", 3:""}
         for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
             left = 0
