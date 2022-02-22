@@ -1,12 +1,12 @@
 """
 Script om sonderingen in te lezen vanuit GEF of XML
-kan ook boringen in XML inlezen
 en sonderingen plotten
 
 Geschreven door Thomas van der Linden, Ingenieursbureau Amsterdam
 19 oktober 2021
 """
 
+from dataclasses import dataclass
 from typing import List
 import pandas as pd
 from io import StringIO
@@ -15,7 +15,10 @@ import re
 from matplotlib.gridspec import GridSpec
 import matplotlib.pyplot as plt
 from datetime import date, datetime
+from shapely.geometry import Point
+import geopandas as gpd
 
+@dataclass
 class Cpt():
     def __init__(self):
         self.easting = None
@@ -28,24 +31,27 @@ class Cpt():
         self.removedlayers = {}
         self.data = None
         self.filename = None
+        self.companyid = None
+        self.projectid = None
+        self.projectname = None
 
     def load_xml(self, xmlFile):
 
-        filename_pattern = re.compile(r'.*\\(?P<filename>.*)')
-        testid_pattern = re.compile(r'<ns\d*:broId>\s*(?P<testid>.*)</ns\d*:broId>')
-        objectid_pattern = re.compile(r'<ns\d*:objectIdAccountableParty>\s*(?P<testid>.*)\s*</ns\d*:objectIdAccountableParty>')
-        xy_id_pattern = re.compile(r'<ns\d*:location srsName="urn:ogc:def:crs:EPSG::28992"\s*.*\d*?:id="BRO_\d*">\s*' + 
-                                        r'<.*\d*?:pos>(?P<X>\d*.?\d*)\s*(?P<Y>\d*.?\d*)</.*\d*?:pos>')
-        z_id_pattern = re.compile(r'<ns\d*:offset uom="(?P<z_unit>.*)">(?P<Z>-?\d*.?\d*)</ns\d*:offset>')
-        trajectory_pattern = re.compile(r'<ns\d*:finalDepth uom="m">(?P<finalDepth>\d*.?\d*)</ns\d*:finalDepth>\s')
-        report_date_pattern = re.compile(r'<ns\d*:researchReportDate>\s*<ns\d*:date>(?P<report_date>\d*-\d*-\d*)</ns\d*:date>')
-        removed_layer_pattern = re.compile(r'<ns\d*:removedLayer>\s*'+ 
-                                                r'<ns\d*:sequenceNumber>(?P<layerNr>\d*)</ns\d*:sequenceNumber>\s*' + 
-                                                r'<ns\d*:upperBoundary uom="m">(?P<layerUpper>\d*.?\d*)</ns\d*:upperBoundary>\s*' + 
-                                                r'<ns\d*:lowerBoundary uom="m">(?P<layerLower>\d*.?\d*)</ns\d*:lowerBoundary>\s*' + 
-                                                r'<ns\d*:description>(?P<layerDescription>.*)</ns\d*:description>\s*' + 
-                                            r'</ns\d*:removedLayer>\s*')
-        data_pattern = re.compile(r'<ns\d*:values>(?P<data>.*)</ns\d*:values>')
+        filename_pattern = re.compile(r'(.*[\\/])*(?P<filename>.*)\.')
+        testid_pattern = re.compile(r'<.*:broId>\s*(?P<testid>.*)</.*:broId>')
+        objectid_pattern = re.compile(r'<.*:objectIdAccountableParty>\s*(?P<testid>.*)\s*</.*:objectIdAccountableParty>')
+        xy_id_pattern = re.compile(r'<.*:location\s*(.*\d*:id="BRO_\d*")?\s*srsName="urn:ogc:def:crs:EPSG::28992"\s*(.*\d*:id="BRO_\d*")?>\s*' +
+                                        r'<.*\d*:pos>(?P<X>\d*\.?\d*)\s*(?P<Y>\d*\.?\d*)</.*\d*:pos>')
+        z_id_pattern = re.compile(r'<.*:offset uom="(?P<z_unit>.*)">(?P<Z>-?\d*\.?\d*)</.*:offset>')
+        trajectory_pattern = re.compile(r'<.*:finalDepth uom="m">(?P<finalDepth>\d*\.?\d*)</.*:finalDepth>\s')
+        report_date_pattern = re.compile(r'<.*:researchReportDate>\s*<.*:date>(?P<report_date>\d*-\d*-\d*)</.*:date>')
+        removed_layer_pattern = re.compile(r'<.*:removedLayer>\s*'+ 
+                                                r'<.*:sequenceNumber>(?P<layerNr>\d*)</.*:sequenceNumber>\s*' + 
+                                                r'<.*:upperBoundary uom="m">(?P<layerUpper>\d*\.?\d*)</.*:upperBoundary>\s*' + 
+                                                r'<.*:lowerBoundary uom="m">(?P<layerLower>\d*\.?\d*)</.*:lowerBoundary>\s*' + 
+                                                r'<.*:description>(?P<layerDescription>.*)</.*:description>\s*' + 
+                                            r'</.*:removedLayer>\s*')
+        data_pattern = re.compile(r'<.*:values>(?P<data>.*)</.*:values>')
 
         with open(xmlFile) as f:
             xml_raw = f.read()
@@ -59,7 +65,7 @@ class Cpt():
             match = re.search(xy_id_pattern, xml_raw)
             self.easting = float(match.group('X'))
             self.northing = float(match.group('Y'))
-            self.srid = match.group('coordsys')
+#            self.srid = match.group('coordsys') # TODO: dit moet worden toegevoegd.
         except:
             pass
         try:
@@ -117,6 +123,7 @@ class Cpt():
         
         self.data = pd.read_csv(StringIO(self.data), names=dataColumns, sep=",", lineterminator=';')
         self.data = self.data.replace(-999999, np.nan)
+        self.data.sort_values(by="depth", inplace=True)
 
     def load_gef(self, gefFile):
         self.columnvoid_values = {}
@@ -150,7 +157,7 @@ class Cpt():
             '22': 'inclinationY'
         }
 
-        filename_pattern = re.compile(r'.*\\(?P<filename>.*)')
+        filename_pattern = re.compile(r'(.*[\\/])*(?P<filename>.*)\.')
         gefid_pattern = re.compile(r'#GEFID\s*=\s*(?P<gefid>\d,\d,\d)\s*')
         xydxdy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<coordsys>\d*)\s*,\s*(?P<X>\d*.?\d*)\s*,\s*(?P<Y>\d*.?\d*)\s*,\s*(?P<dx>\d*.?\d*),\s*(?P<dy>\d*.?\d*)\s*')
         xy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<coordsys>\d*)\s*,\s*(?P<X>\d*.?\d*)\s*,\s*(?P<Y>\d*.?\d*)\s*')
@@ -203,6 +210,14 @@ class Cpt():
             self.srid = match.group('coordsys')
         except:
             pass
+
+        # check oude RD-coördinaten
+        if self.easting < 0:
+            geometry = Point([self.easting, self.northing])
+            reprojectedGeometry = gpd.GeoSeries(geometry, crs="epsg:28991").to_crs("epsg:28992")
+            self.easting = reprojectedGeometry.x
+            self.northing = reprojectedGeometry.y
+
         try:
             match = re.search(zdz_id_pattern, gef_raw)
             self.groundlevel = float(match.group('Z'))
@@ -299,6 +314,7 @@ class Cpt():
                 self.data["frictionRatio"] = 100 * self.data["localFriction"] / self.data["coneResistance"]
             # anders is de waarde 0, ten behoeve van plot
             else:
+                self.data["localFriction"] = 0
                 self.data["frictionRatio"] = 0
         # soms is de ingelezen diepte positief en soms negatief
         # moet positief zijn 
@@ -307,8 +323,28 @@ class Cpt():
 
         # soms is er geen diepte, maar wel sondeerlengte aanwezig
         # sondeerlengte als diepte gebruiken is goed genoeg als benadering
+        # TODO: onderstaande blok voor diepte correctie is niet gecheckt op correctheid 
+        # TODO: vraag me af of het gebruik hiervan ooit mogelijk / nodig is, want indien de hoek gemeten is, dan is meestal ook de gecorrigeerde diepte gerapporteerd
         elif "penetrationLength" in self.data.columns:
-            self.data["depth"] = self.data["penetrationLength"]
+            if "inclinationResultant" in self.data.columns:
+                self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+            elif "inclinationEW" in self.data.columns and "inclinationNS" in self.data.columns:
+                z = self.data["penetrationLength"].diff().abs()
+                x = z * np.tan(np.deg2rad(self.data["inclinationEW"]))
+                y = z * np.tan(np.deg2rad(self.data["inclinationNS"]))
+                self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
+                self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+            elif "inclinationX" and "inclinationY" in self.data.columns:
+                z = self.data["penetrationLength"].diff().abs()
+                x = z * np.tan(np.deg2rad(self.data["inclinationX"]))
+                y = z * np.tan(np.deg2rad(self.data["inclinationY"]))
+                self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
+                self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+            else:
+                self.data["depth"] = self.data["penetrationLength"].abs()
 
         # nan waarden geven vervelende strepen in de afbeeldingen
         self.data.dropna(subset=["depth", "coneResistance", "localFriction", "frictionRatio"], inplace=True)
@@ -329,73 +365,79 @@ class Cpt():
             self.groundlevel = 0
 
         y = self.groundlevel - self.data["depth"]
-        x1 = self.data["coneResistance"]
-        x2 = self.data["frictionRatio"]
 
         # x,y voor maaiveld in figuur
         x_maaiveld = [0, 10]
         y_maaiveld = [self.groundlevel, self.groundlevel]
 
-        # figuur met twee grafieken
-        fig = plt.figure(constrained_layout=True, figsize=(8,10))
-        gs = GridSpec(nrows=2, ncols=2, figure=fig, width_ratios=[4,1], height_ratios=[10,1])
-        # grafiek 1 is conusweerstand
-        ax1 = fig.add_subplot(gs[0,0])
-        # grafiek 2 is wrijvingsgetal
-        ax2 = fig.add_subplot(gs[0,1])
-        # een rechthoek voor de metadata
-        ax3 = fig.add_subplot(gs[1,:])
-        # plot conusweerstand
-        ax1.plot(x1, y)
+        # figuur met conusweerstand, wrijving, wrijvingsgetal, helling en waterspanning
+        # TODO: dit kunnen we ook op dezelfde manier doen als bij de boringen, zodat de verticale schaal altijd hetzelfde is
+        # TODO: dat is wel lastiger met pdf maken
+
+        fig = plt.figure(figsize=(8.3 * 2,11.7 * 2)) # 8.3 x 11.7 inch is een A4
+        gs = GridSpec(2, 5, height_ratios=[10,1], width_ratios=[5, 1, 1, 1, 1] , figure=fig)
+        
+        axes = []
+        for i in range(5):
+            if i == 0:
+                axes.append(fig.add_subplot(gs[0, i])) 
+            else:    
+                axes.append(fig.add_subplot(gs[0, i], sharey=axes[0]))
+
+        axes.append(fig.add_subplot(gs[1,:]))
+
+        axes[0].plot(self.data['coneResistance'], y, label='qc [MPa]', linewidth=1.25, color='#4b0082')
+        axes[1].plot(self.data["localFriction"], y, label='fs [MPa]', linewidth=1.25, color='blue')
+        axes[2].plot(self.data["frictionRatio"], y, label='Rf [%]', linewidth=1.25, color='red')
+        
+        inclinations = ["inclinationEW", "inclinationNS", "inclinationX", "inclinationY", "inclinationResultant"]
+        for inclination in inclinations:
+            if inclination in self.data.columns:
+                axes[3].plot(self.data[inclination], y, label=re.sub(r'inclination', '', inclination), linewidth=1.25, color='green')
+        
+        porePressures = ["porePressureU1", "porePressureU2", "porePressureU3"]
+        for porePressure in porePressures:
+            if porePressure in self.data.columns:
+                axes[4].plot(self.data[porePressure], y, label=porePressure[-2:], linewidth=1.25, color='blue')
+
         # plot maaiveld, bestaat uit een streep en een arcering
-        ax1.plot(x_maaiveld, y_maaiveld, color='black')
-        ax1.barh(self.groundlevel, width=10, height=-0.4, align='edge', hatch='/\/', color='#ffffffff')
-        # plot wrijvingsgetal
-        ax2.plot(x2, y)
+        axes[0].plot(x_maaiveld, y_maaiveld, color='black')
+        axes[0].barh(self.groundlevel, width=10, height=-0.4, align='edge', hatch='/\/', color='#ffffffff')
 
-        # stel maximum en minimum waarden in voor assen
-        ax1.set_xlim(0,40)
-        ax2.set_xlim(0,10)
-        ax1.set_ylim(y.min(), int(self.groundlevel) + 1)
-        ax2.set_ylim(y.min(), int(self.groundlevel) + 1)
+        axes[0].set_ylabel("Niveau [m t.o.v. NAP]")
+        axes[0].set_xlabel("qc [MPa]")
+        axes[1].set_xlabel("fs [MPa]")
+        axes[2].set_xlabel("Rf [%]")
+        axes[3].set_xlabel("helling [deg]")
+        axes[4].set_xlabel("u [Mpa]")
+        axes[3].legend()
+        axes[4].legend()
 
-        # stel markeringen op de x-assen in
-        ax1.set_xticks(ticks=np.arange(0, 40, 5))
-        ax2.set_xticks(ticks=np.arange(0, 10, 2))
-        ax1.set_xticks(ticks=np.arange(0, 40, 1), minor=True)
-        ax2.set_xticks(ticks=np.arange(0, 10, 1), minor=True)
-        
-        # stel markeringen op de y-assen in
-        ax1.set_yticks(ticks=np.arange(int(y.min())-1, int(self.groundlevel)+1, 1))
-        ax2.set_yticks(ticks=np.arange(int(y.min())-1, int(self.groundlevel)+1, 1))
-        ax1.set_yticks(ticks=np.arange(int(y.min())-1, int(y.max())+1, 0.5), minor=True)
-        ax2.set_yticks(ticks=np.arange(int(y.min())-1, int(y.max())+1, 0.5), minor=True)
+        axes[0].set_xlim([0, 40])
+        axes[2].set_xlim([0, 12])
 
-        # maak een grid
-        ax1.grid(True, which="major", axis="both", color="black", linestyle='-')
-        ax1.grid(True, which="minor", axis="both", linestyle='--')
-        ax2.grid(True, which="major", axis="both", color="black", linestyle='-')
-        ax2.grid(True, which="minor", axis="both", linestyle='--')
+        axes[-1].set_axis_off()
+        plt.text(0.05, 0.6, f'Sondering: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\n', ha='left', va='top', fontsize=14, fontweight='bold')
+        plt.text(0.35, 0.6, f'Uitvoerder: {self.companyid}\nDatum: {self.reportdate}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', ha='left', va='top', fontsize=14, fontweight='bold')
+        plt.text(0.05, 0, 'Ingenieursbureau Gemeente Amsterdam Vakgroep Geotechniek Python ', fontsize=13.5)
 
-        # stel labels bij de assen in
-        ax1.set_xlabel("qc [MPa]")
-        ax1.set_ylabel("Niveau [m t.o.v. NAP]")
-        ax1.text(10, self.groundlevel, f'Maaiveld: NAP {self.groundlevel} m')
-        ax2.set_xlabel("Rf [%]")
+        for ax in axes:
 
-        # voeg metadata toe aan
-        ax3.text(0.05, 0.9, self.testid, va="center", ha="left")
-        ax3.text(0.05, 0.75, self.easting, va="center", ha="left")
-        ax3.text(0.25, 0.75, self.northing, va="center", ha="left")
-        ax3.text(0.05, 0.6, self.startdate, va="center", ha="left")
-        
-        # stel een titel in
-        plt.suptitle(self.testid)
+            ax.minorticks_on()
+
+            ax.tick_params(which='major', color='black')
+            ax.tick_params(which='minor', color='black')
+
+            ax.grid(which='major', linestyle='-', linewidth='0.15', color='black')
+            ax.grid(which='minor', linestyle='-', linewidth='0.1')
+            ax.grid(b=True, which='both')
+
         # sla de figuur op
+        plt.tight_layout()
         plt.savefig(fname=f"./output/{self.filename}.png")
         plt.close('all')
 
-        # andere optie
+        # andere optie voor bestandsnaam
         save_as_projectid_fromfile = False
         if save_as_projectid_fromfile:
             if self.projectid is not None: # TODO: dit moet ergens anders. Moet ook projectid uit mapid kunnen halen
@@ -405,7 +447,7 @@ class Cpt():
                 plt.savefig(fname=f"./output/{self.projectname}_{self.testid}.png")
                 plt.close('all')
 
-
+@dataclass
 class Bore():
     def __init__(self):
         self.easting = None
@@ -423,59 +465,70 @@ class Bore():
     
     def load_xml(self, xmlFile):
         # lees een boring in vanuit een BRO XML
-        testid_pattern = re.compile(r'<broId>\s*(?P<testid>.*)</broId>')
-        xy_id_pattern = re.compile(r'<ns\d*:Point\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)"\s*ns\d*:id="BRO_0001">\s*' +
-                        r'<ns\d*:pos>(?P<X>\d*.?\d*)\s*(?P<Y>\d*.?\d*)</ns\d*:pos>')
-        z_id_pattern = re.compile(r'<ns\d*:offset uom="(?P<z_unit>.*)">(?P<Z>.*)</ns\d*:offset>')
-        trajectory_pattern = re.compile(r'<ns\d*:finalDepthBoring uom="m">(?P<finalDepth>\d*.?\d*)</ns\d*:finalDepthBoring>')
-        report_date_pattern = re.compile(r'<ns\d*:descriptionReportDate>\s*<date>(?P<report_date>\d*-\d*-\d*)</date>')
+        testid_pattern_broid = re.compile(r'<broId>\s*(?P<testid>.*)</broId>')
+        testid_pattern_accountableparty = re.compile(r'<objectIdAccountableParty>\s*(?P<testid>.*)</objectIdAccountableParty>')
+        xy_id_pattern_crs_first = re.compile(r'<.*:Point\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)"\s*.*:id=".*">\s*' +
+                        r'<.*:pos>(?P<X>\d*.?\d*)\s*(?P<Y>\d*.?\d*)</.*:pos>')
+        xy_id_pattern_id_first = re.compile(r'<.*:Point\s*.*:id=".*"\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)">\s*' +
+                        r'<.*:pos>(?P<X>\d*.?\d*)\s*(?P<Y>\d*.?\d*)</.*:pos>')
+        z_id_pattern = re.compile(r'<.*:offset uom="(?P<z_unit>.*)">(?P<Z>.*)</.*:offset>')
+        trajectory_pattern = re.compile(r'<.*:finalDepthBoring uom="m">(?P<finalDepth>\d*.?\d*)</.*:finalDepthBoring>')
+        report_date_pattern = re.compile(r'<.*:descriptionReportDate>\s*<date>(?P<reportDate>\d*-\d*-\d*)</date>')
+        description_quality_pattern = re.compile(r'<.*:descriptionQuality\s*codeSpace="urn:bro:bhrgt:DescriptionQuality">(?P<descriptionQuality>.*)</')
 
         # TODO: dit kan worden opgesplitst, maar dan raak je wel de samenhang kwijt
         # TODO: met """ i.p.v. ' ' + ' '
-        soil_pattern = re.compile(r'<ns\d*:layer>\s*' + 
-                                    r'<ns\d*:upperBoundary uom="m">(?P<layerUpper>\d*.?\d*)</ns\d*:upperBoundary>\s*' +
-                                    r'<ns\d*:upperBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod">.*</ns\d*:upperBoundaryDetermination>\s*' +
-                                    r'<ns\d*:lowerBoundary uom="m">(?P<layerLower>\d*.?\d*)</ns\d*:lowerBoundary>\s*' +
-                                    r'<ns\d*:lowerBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod">.*</ns\d*:lowerBoundaryDetermination>\s*' +
-                                    r'<ns\d*:anthropogenic>(?P<anthropogenic>.*)</ns\d*:anthropogenic>\s*' +
-                                    r'(<ns\d*:slant>(?P<slant>.*)</ns\d*:slant>\s*)?' +
-                                    r'(<ns\d*:internalStructureIntact>(?P<internalstructure>.*)</ns\d*:internalStructureIntact>\s*)?' +
-                                    r'(<ns\d*:bedded>(?P<bedded>.*)</ns\d*:bedded>\s*)?' +
-                                    r'(<ns\d*:compositeLayer>(?P<compositelayer>.*)</ns\d*:compositeLayer>\s*)?'
-                                    r'<ns\d*:soil>\s*' +
-                                        r'<ns\d*:geotechnicalSoilName codeSpace="urn:bro:bhrgt:GeotechnicalSoilName">(?P<soilName>.*)</ns\d*:geotechnicalSoilName>\s*' +
-                                        r'<ns\d*:tertiaryConstituent codeSpace="urn:bro:bhrgt:TertiaryConstituent">(?P<tertiaryConstituent>.*)</ns\d*:tertiaryConstituent>\s*' +
-                                        r'<ns\d*:colour codeSpace="urn:bro:bhrgt:Colour">(?P<colour>.*)</ns\d*:colour>\s*' +
-                                        r'<ns\d*:dispersedInhomogeneity codeSpace="urn:bro:bhrgt:DispersedInhomogeneity">(?P<inhomogeneity>.*)</ns\d*:dispersedInhomogeneity>\s*')
+        soil_pattern = re.compile(r'<.*:layer>\s*' + 
+                                    r'<.*:upperBoundary uom="m">(?P<layerUpper>\d*.?\d*)</.*:upperBoundary>\s*' +
+                                    r'<.*:upperBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod">.*</.*:upperBoundaryDetermination>\s*' +
+                                    r'<.*:lowerBoundary uom="m">(?P<layerLower>\d*.?\d*)</.*:lowerBoundary>\s*' +
+                                    r'<.*:lowerBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod">.*</.*:lowerBoundaryDetermination>\s*' +
+                                    r'<.*:anthropogenic>(?P<anthropogenic>.*)</.*:anthropogenic>\s*' +
+                                    r'(<.*:slant>(?P<slant>.*)</.*:slant>\s*)?' +
+                                    r'(<.*:internalStructureIntact>(?P<internalstructure>.*)</.*:internalStructureIntact>\s*)?' +
+                                    r'(<.*:bedded>(?P<bedded>.*)</.*:bedded>\s*)?' +
+                                    r'(<.*:compositeLayer>(?P<compositelayer>.*)</.*:compositeLayer>\s*)?'
+                                    r'<.*:soil>\s*' +
+                                        r'<.*:geotechnicalSoilName codeSpace="urn:bro:bhrgt:GeotechnicalSoilName">(?P<soilName>.*)</.*:geotechnicalSoilName>\s*' +
+                                        r'(<.*:tertiaryConstituent codeSpace="urn:bro:bhrgt:TertiaryConstituent">(?P<tertiaryConstituent>.*)</.*:tertiaryConstituent>\s*)?' +
+                                        r'(<.*:colour codeSpace="urn:bro:bhrgt:Colour">(?P<colour>.*)</.*:colour>\s*)?' +
+                                        r'(<.*:dispersedInhomogeneity codeSpace="urn:bro:bhrgt:DispersedInhomogeneity">(?P<inhomogeneity>.*)</.*:dispersedInhomogeneity>\s*)?')
 
-        sand_pattern = re.compile(      r'(<ns\d*:carbonateContentClass codeSpace="urn:bro:bhrgt:CarbonateContentClass">(?P<carbonatecontent>.*)</ns\d*:carbonateContentClass>\s*)?' +
-                                        r'<ns\d*:organicMatterContentClass codeSpace="urn:bro:bhrgt:OrganicMatterContentClass">(?P<organicMatter>.*)</ns\d*:organicMatterContentClass>\s*' +
-                                        r'<ns\d*:sandMedianClass codeSpace="urn:bro:bhrgt:SandMedianClass">(?P<sandMedian>.*)</ns\d*:sandMedianClass>\s*' +
-                                        r'<ns\d*:grainshape>\s*' +
-                                            r'<ns\d*:sizeFraction codeSpace="urn:bro:bhrgt:SizeFraction">(?P<sizeFraction>.*)</ns\d*:sizeFraction>\s*' +
-                                            r'<ns\d*:angularity codeSpace="urn:bro:bhrgt:Angularity">(?P<angularity>.*)</ns\d*:angularity>\s*' +
-                                            r'<ns\d*:sphericity codeSpace="urn:bro:bhrgt:Sphericity">(?P<sphericity>.*)</ns\d*:sphericity>\s*' +
-                                        r'</ns\d*:grainshape>\s*'
+        sand_pattern = re.compile(      r'(<.*:carbonateContentClass codeSpace="urn:bro:bhrgt:CarbonateContentClass">(?P<carbonatecontent>.*)</.*:carbonateContentClass>\s*)?' +
+                                        r'<.*:organicMatterContentClass codeSpace="urn:bro:bhrgt:OrganicMatterContentClass">(?P<organicMatter>.*)</.*:organicMatterContentClass>\s*' +
+                                        r'<.*:sandMedianClass codeSpace="urn:bro:bhrgt:SandMedianClass">(?P<sandMedian>.*)</.*:sandMedianClass>\s*' +
+                                        r'<.*:grainshape>\s*' +
+                                            r'<.*:sizeFraction codeSpace="urn:bro:bhrgt:SizeFraction">(?P<sizeFraction>.*)</.*:sizeFraction>\s*' +
+                                            r'<.*:angularity codeSpace="urn:bro:bhrgt:Angularity">(?P<angularity>.*)</.*:angularity>\s*' +
+                                            r'<.*:sphericity codeSpace="urn:bro:bhrgt:Sphericity">(?P<sphericity>.*)</.*:sphericity>\s*' +
+                                        r'</.*:grainshape>\s*'
                                     )
 
-        peat_pattern = re.compile(      r'(<ns\d*:mixed>(?P<mixed>.*)</ns\d*:mixed>\s*)?' +
-                                        r'<ns\d*:peatType codeSpace="urn:bro:bhrgt:PeatType">(?P<type>.*)</ns\d*:peatType>\s*' +
-                                        r'(<ns\d*:organicSoilTexture codeSpace="urn:bro:bhrgt:OrganicSoilTexture">(?P<soiltexture>.*)</ns\d*:organicSoilTexture>\s*)?' +
-                                        r'(<ns\d*:organicSoilConsistency codeSpace="urn:bro:bhrgt:OrganicSoilConsistency">(?P<consistency>.*)</ns\d*:organicSoilConsistency>\s*)?' +
-                                        r'(<ns\d*:peatTensileStrength codeSpace="urn:bro:bhrgt:PeatTensileStrength">(?P<tensilestrength>.*)</ns\d*:peatTensileStrength>\s*)?'
+        peat_pattern = re.compile(      r'(<.*:mixed>(?P<mixed>.*)</.*:mixed>\s*)?' +
+                                        r'<.*:peatType codeSpace="urn:bro:bhrgt:PeatType">(?P<type>.*)</.*:peatType>\s*' +
+                                        r'(<.*:organicSoilTexture codeSpace="urn:bro:bhrgt:OrganicSoilTexture">(?P<soiltexture>.*)</.*:organicSoilTexture>\s*)?' +
+                                        r'(<.*:organicSoilConsistency codeSpace="urn:bro:bhrgt:OrganicSoilConsistency">(?P<consistency>.*)</.*:organicSoilConsistency>\s*)?' +
+                                        r'(<.*:peatTensileStrength codeSpace="urn:bro:bhrgt:PeatTensileStrength">(?P<tensilestrength>.*)</.*:peatTensileStrength>\s*)?'
                                     )
 
-        clay_pattern = re.compile(      r'(<ns\d*:carbonateContentClass codeSpace="urn:bro:bhrgt:CarbonateContentClass">(?P<carbonatecontent>.*)</ns\d*:carbonateContentClass>\s*)?' +
-                                        r'<ns\d*:organicMatterContentClass codeSpace="urn:bro:bhrgt:OrganicMatterContentClass">(?P<organicMatter>.*)</ns\d*:organicMatterContentClass>\s*' +
-                                        r'(<ns\d*:mixed>(?P<mixed>.*)</ns\d*:mixed>\s*)?'+ 
-                                        r'(<ns\d*:fineSoilConsistency codeSpace="urn:bro:bhrgt:FineSoilConsistency">(?P<consistency>.*)</ns\d*:fineSoilConsistency>\s*)?'
+        clay_pattern = re.compile(      r'(<.*:carbonateContentClass codeSpace="urn:bro:bhrgt:CarbonateContentClass">(?P<carbonatecontent>.*)</.*:carbonateContentClass>\s*)?' +
+                                        r'<.*:organicMatterContentClass codeSpace="urn:bro:bhrgt:OrganicMatterContentClass">(?P<organicMatter>.*)</.*:organicMatterContentClass>\s*' +
+                                        r'(<.*:mixed>(?P<mixed>.*)</.*:mixed>\s*)?'+ 
+                                        r'(<.*:fineSoilConsistency codeSpace="urn:bro:bhrgt:FineSoilConsistency">(?P<consistency>.*)</.*:fineSoilConsistency>\s*)?'
                                     )
 
         with open(xmlFile) as f:
             xml_raw = f.read()
 
         try:
-            match = re.search(xy_id_pattern, xml_raw)
+            match = re.search(xy_id_pattern_crs_first, xml_raw)
+            self.easting = float(match.group('X'))
+            self.northing = float(match.group('Y'))
+            self.srid = match.group('coordsys')
+        except:
+            pass
+        try:
+            match = re.search(xy_id_pattern_id_first, xml_raw)
             self.easting = float(match.group('X'))
             self.northing = float(match.group('Y'))
             self.srid = match.group('coordsys')
@@ -487,19 +540,29 @@ class Bore():
         except:
             pass
         try:
-            match = re.search(testid_pattern, xml_raw)
+            match = re.search(testid_pattern_broid, xml_raw)
+            self.testid = match.group('testid')
+        except:
+            pass
+        try:
+            match = re.search(testid_pattern_accountableparty, xml_raw)
             self.testid = match.group('testid')
         except:
             pass
         try:
             match = re.search(report_date_pattern, xml_raw)
-            reportdateString = match.group('report_date')
+            reportdateString = match.group('reportDate')
             self.reportdate = datetime.strptime(reportdateString, '%Y-%m-%d')
         except:
             pass
         try:
             match = re.search(trajectory_pattern, xml_raw)
             self.finaldepth = float(match.group('finalDepth'))
+        except:
+            pass
+        try:
+            match = re.search(description_quality_pattern, xml_raw)
+            self.descriptionquality = match.group('descriptionQuality')
         except:
             pass
         try:
@@ -552,41 +615,290 @@ class Bore():
         # zet om in een dataframe om het makkelijker te verwerken
         self.soillayers = pd.DataFrame(self.soillayers)
 
-        # voeg een plotkleur toe
-        colorsDict = {"zand": "yellow", "veen": "brown", "klei": "green", "grind": "orange", "silt": "blue"}
-        colors = self.soillayers["soilName"]
-        for soil, color in colorsDict.items():
-            colors = np.where(self.soillayers["soilName"].str.lower().str.endswith(soil), color, colors)
-        self.soillayers["plotColor"] = colors
+        # voeg verdeling componenten toe
+        # van https://github.com/cemsbv/pygef/blob/master/pygef/broxml.py
+        material_components = ["gravel_component", "sand_component", "clay_component", "loam_component", "peat_component", "silt_component"]
+        soil_names_dict_lists = {
+            "betonOngebroken": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # specialMaterial
+            "keitjes": [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "klei": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+            "kleiigVeen": [0.0, 0.0, 0.3, 0.0, 0.7, 0.0],
+            "kleiigZand": [0.0, 0.7, 0.3, 0.0, 0.0, 0.0],
+            "kleiigZandMetGrind": [0.05, 0.65, 0.3, 0.0, 0.0, 0.0],
+            "puin": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # specialMaterial
+            "siltigZand": [0.0, 0.7, 0.0, 0.0, 0.0, 0.3],
+            "siltigZandMetGrind": [0.05, 0.65, 0.0, 0.0, 0.0, 0.3],
+            "sterkGrindigZand": [0.3, 0.7, 0.0, 0.0, 0.0, 0.0],
+            "sterkGrindigeKlei": [0.3, 0.0, 0.7, 0.0, 0.0, 0.0],
+            "sterkZandigGrind": [0.7, 0.3, 0.0, 0.0, 0.0, 0.0],
+            "sterkZandigSilt": [0.0, 0.3, 0.0, 0.0, 0.0, 0.7],
+            "sterkZandigeKlei": [0.0, 0.3, 0.7, 0.0, 0.0, 0.0],
+            "sterkZandigeKleiMetGrind": [0.05, 0.3, 0.65, 0.0, 0.0, 0.0],
+            "veen": [0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            "zand": [0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            "zwakGrindigZand": [0.1, 0.9, 0.0, 0.0, 0.0, 0.0],
+            "zwakGrindigeKlei": [0.1, 0.0, 0.9, 0.0, 0.0, 0.0],
+            "zwakZandigGrind": [0.9, 0.1, 0.0, 0.0, 0.0, 0.0],
+            "zwakZandigVeen": [0.0, 0.1, 0.0, 0.0, 0.9, 0.0],
+            "zwakZandigeKlei": [0.0, 0.1, 0.9, 0.0, 0.0, 0.0],
+            "zwakZandigeKleiMetGrind": [0.05, 0.1, 0.85, 0.0, 0.0, 0.0],
+        }
+        # voor sorteren op bijdrage is het handiger om een dictionary te maken
+        soil_names_dict_dicts = {}
+        for key, value in soil_names_dict_lists.items():
+            soil_names_dict_dicts[key] = dict(sorted({v: i for i, v in enumerate(value)}.items(), reverse=True))
+        self.soillayers["components"] = self.soillayers["soilName"].map(soil_names_dict_dicts)
 
         # voeg kolommen toe met absolute niveaus (t.o.v. NAP)
         self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upper"] 
         self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lower"] 
 
+    def load_gef(self, gefFile):
+
+        self.columninfo = {}
+        self.columnvoid_values = {}
+        self.descriptionquality = str() # TODO
+
+        GEF_COLINFO = { 
+            '1': 'upper',
+            '2': 'lower'
+        }
+
+        test_id_pattern = re.compile(r'#TESTID\s*=\s*(?P<testid>.*)\s*')
+        xy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<refsystem>\d*),\s*(?P<X>\d*\.?\d*),\s*(?P<Y>\d*\.?\d*)(,\s*(?P<dX>\d*\.?\d*),\s*(?P<dY>\d*\.?\d*))?\s*')
+        xydxdy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<coordsys>\d*)\s*,\s*(?P<X>\d*.?\d*)\s*,\s*(?P<Y>\d*.?\d*)\s*,\s*(?P<dx>\d*.?\d*),\s*(?P<dy>\d*.?\d*)\s*')
+        z_id_pattern = re.compile(r'#ZID\s*=\s*(?P<refsystem>\d*),\s*(?P<Z>\d*\.?\d*)(,\s*(?P<dZ>\d*\.?\d*))')
+        zdz_id_pattern = re.compile(r'#ZID\s*=\s*(?P<datum>\d*)\s*,\s*(?P<Z>.*)\s*,\s*(?P<dZ>.*)\s*')
+        
+        data_pattern = re.compile(r'#EOH\s*=\s*(?P<data>(.*\n)*)')
+
+        columnvoid_pattern = re.compile(r'#COLUMNVOID\s*=\s*(?P<columnnr>\d*),\s*(?P<voidvalue>.*)\s*')
+        columninfo_pattern = re.compile(r'#COLUMNINFO\s*=\s*(?P<columnnr>\d*),\s*(?P<unit>.*),\s*(?P<parameter>.*),\s*(?P<quantitynr>\d*)\s*')
+        columnseparator_pattern = re.compile(r'#COLUMNSEPARATOR\s*=\s*(?P<columnseparator>.*)')
+        recordseparator_pattern = re.compile(r'#RECORDSEPARATOR\s*=\s*(?P<recordseparator>.*)')
+
+        with open(gefFile) as f:
+            gef_raw = f.read()
+
+        try:
+            match = re.search(test_id_pattern, gef_raw)
+            self.testid = match.group('testid')
+        except:
+            pass
+
+        try:
+            match = re.search(xy_id_pattern, gef_raw)
+            self.easting = float(match.group('X'))
+            self.northing = float(match.group('Y'))
+        except:
+            pass
+        try:
+            match = re.search(xydxdy_id_pattern, gef_raw)
+            self.easting = float(match.group('X'))
+            self.northing = float(match.group('Y'))
+        except:
+            pass
+
+        # check oude RD-coördinaten
+        if self.easting < 0:
+            geometry = Point([self.easting, self.northing])
+            reprojectedGeometry = gpd.GeoSeries(geometry, crs="epsg:28991").to_crs("epsg:28992")
+            self.easting = reprojectedGeometry.x
+            self.northing = reprojectedGeometry.y
+
+        try:
+            match = re.search(z_id_pattern, gef_raw)
+            self.groundlevel = float(match.group('Z'))
+        except:
+            pass
+        try:
+            match = re.search(zdz_id_pattern, gef_raw)
+            self.groundlevel = float(match.group('Z'))
+        except:
+            pass
+        try:
+            match = re.search(data_pattern, gef_raw)
+            self.soillayers = match.group('data')
+        except:
+            pass
+        try:
+            match = re.search(columnseparator_pattern, gef_raw)
+            self.columnseparator = match.group('columnseparator')
+        except:
+            pass
+        try:
+            match = re.search(recordseparator_pattern, gef_raw)
+            self.recordseparator = match.group('recordseparator')
+        except:
+            pass
+        try:
+            matches = re.finditer(columnvoid_pattern, gef_raw)
+            for match in matches:
+                columnnr = match.group('columnnr')
+                voidvalue = match.group('voidvalue')
+                self.columnvoid_values[int(columnnr) - 1] = float(voidvalue)
+        except:
+            pass
+        try:
+            # informatie in kolommen kan meerdere namen hebben
+            # nummers zijn wel gestandardiseerd
+            matches = re.finditer(columninfo_pattern, gef_raw)
+            for match in matches:
+                columnnr = match.group('columnnr')
+                quantitynr = match.group('quantitynr')
+                # kolomnummers in pandas starten op 0, in gef op 1 
+                self.columninfo[int(columnnr) - 1] = GEF_COLINFO[quantitynr]
+        except:
+            pass
+        
+        # zet de data om in een dataframe, dan kunnen we er wat mee    
+        self.soillayers = pd.read_csv(StringIO(self.soillayers), sep=self.columnseparator, skipinitialspace=True, header=None)
+        
+        # vervang de dummy waarden door nan
+        for columnnr, voidvalue in self.columnvoid_values.items():
+            self.soillayers[columnnr] = self.soillayers[columnnr].replace(voidvalue, np.nan)
+
+        # TODO: deze namen kloppen wellicht niet helemaal
+        self.columninfo[max(self.columninfo.keys()) + 1] = 'soilName'
+        self.columninfo[max(self.columninfo.keys()) + 1] = 'toelichting'
+        self.columninfo[max(self.columninfo.keys()) + 1] = 'materialproperties'
+
+        # geef de kolommen andere namen
+        self.soillayers = self.soillayers.rename(columns=self.columninfo)
+
+        self.soillayers = self.soillayers.replace("'", "", regex=True)
+
+        # voeg niveaus t.o.v. NAP toe
+        self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upper"] 
+        self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lower"] 
+
+        # geef de maximaal diepte t.o.v. maaiveld
+        self.finaldepth = self.soillayers["upper_NAP"].max() - self.soillayers["lower_NAP"].min()
+
+        # zet de codering om in iets dat geplot kan worden
+        material_pattern = re.compile(r'(?P<main>[GKLSVZ])(?P<second>[ghklsvz])?(?P<secondQuantity>\d)?(?P<third>[ghklsvz])?(?P<thirdQuantity>\d)?(?P<fourth>[ghklsvz])?(?P<fourthQuantity>\d)?')
+
+        components = []
+        for row in self.soillayers.itertuples():
+            componentsRow = {}
+            material = getattr(row, 'soilName')
+            if 'NBE' not in material:
+                match = re.search(material_pattern, material)
+                main = match.group('main')
+            else:
+                main = 'N'
+                secondQuantity, thirdQuantity, fourthQuantity = 0, 0, 0
+
+            try:
+                match = re.search(material_pattern, material)
+                second = match.group('second')
+                secondQuantity = 0.05
+            except:
+                pass
+
+            try:
+                match = re.search(material_pattern, material)
+                third = match.group('third')
+                thirdQuantity = 0.
+            except:
+                pass
+
+            try:
+                match = re.search(material_pattern, material)
+                fourth = match.group('fourth')
+                fourthQuantity = 0.
+            except:
+                pass
+
+            try:
+                match = re.search(material_pattern, material)
+                secondQuantity = int(match.group('secondQuantity')) * 0.05
+            except:
+                pass
+
+            try:
+                match = re.search(material_pattern, material)
+                thirdQuantity = int(match.group('thirdQuantity')) * 0.049
+            except:
+                pass
+
+            try:
+                match = re.search(material_pattern, material)
+                fourthQuantity = int(match.group('fourthQuantity')) * 0.048
+            except:
+                pass
+
+            mainQuantity = 1 - secondQuantity - thirdQuantity - fourthQuantity
+
+            material_components = {"G": 0, "Z": 1, "K": 2, "S": 5, "V": 4, "L": 3, "H": 4, "N": 999}
+
+            componentsRow[mainQuantity] = material_components[main]
+            try:
+                componentsRow[secondQuantity] = material_components[second.upper()]
+            except:
+                pass
+            try:
+                componentsRow[thirdQuantity] = material_components[third.upper()]
+            except:
+                pass
+
+            try:
+                componentsRow[fourthQuantity] = material_components[fourth.upper()]
+            except:
+                pass
+
+            components.append(componentsRow)
+        self.soillayers["components"] = components
+
+
     def plot(self):
-        # maak een eenvoudige plot van een boring, alleen het hoofdmateriaal
-        fig, ax = plt.subplots(figsize=(10,5))
-        hatchesDict = {"zand": "...", "veen": "---", "klei": "///", "grind": "ooo", "silt": "xxx"}
-       
-        hatches = self.soillayers["soilName"]
-        for soil, hatch in hatchesDict.items():
-            hatches = np.where(self.soillayers["soilName"].str.lower().str.endswith(soil), hatch, hatches)
-
+        # maak een eenvoudige plot van een boring
         uppers = list(self.soillayers["upper_NAP"])
-        labels = list(self.soillayers["soilName"])
-        colors = list(self.soillayers["plotColor"])
+        lowers = list(self.soillayers["lower_NAP"])
 
-        # maak een staafdiagram, met overlappende staven
-        for upper, color, hatch, label in reversed(list(zip(uppers, colors, hatches, labels))):
-            barPlot = ax.bar(self.testid, upper, width=0.5, color=color, hatch=hatch, edgecolor="black")
+        # maak een diagram met primaire en secundaire componenten
+        fig = plt.figure(figsize=(6, self.finaldepth + 2)) 
+        gs = GridSpec(2, 2, height_ratios=[self.finaldepth, 2], width_ratios=[2, 1] , figure=fig)
+        
+        axes = []
+        axes.append(fig.add_subplot(gs[0, 0]))
+        axes.append(fig.add_subplot(gs[0, 1], sharey=axes[0]))
+        axes.append(fig.add_subplot(gs[1,:]))
 
-            # voeg labels toe met de materiaalnaam
-            # TODO: positie moet beter
-            for rect in barPlot:
-                height = rect.get_height()
-                ax.text(rect.get_x() + rect.get_width(), height,
-                        label,
-                        ha='left', va='bottom')
-        plt.show()
+        components = list(self.soillayers["components"])
+        colorsDict = {1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple", 999: "black"}
+        hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "\\\\\\", 3:""}
+        for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
+            left = 0
+            for comp, nr in component.items():
+                barPlot = axes[0].barh(lower, width=comp, left=left, height=upper-lower, color=colorsDict[nr], hatch=hatchesDict[nr], edgecolor="black", align="edge")
+                left += comp
+
+        axes[0].set_ylim([self.groundlevel - self.finaldepth, self.groundlevel])
+        axes[0].set_xticks([])
+        axes[0].set_ylabel('diepte [m t.o.v. NAP]')
+
+        # voeg de beschrijving toe
+        for layer in self.soillayers.itertuples():
+            y = (getattr(layer, "lower_NAP") + getattr(layer, "upper_NAP")) / 2
+            for materialproperties in ["clayproperties", "sandproperties", "peatproperties", "materialproperties"]:
+                try:
+                    properties = getattr(layer, materialproperties)
+                    propertiesText = ""
+                    for key, value in properties.items():
+                        propertiesText += f', {value}'
+                except:
+                    pass
+            text = f'{getattr(layer, "soilName")}{propertiesText}'
+            axes[1].text(0, y, text, wrap=True)
+
+
+        # verberg de assen van de onderste plot en rechtse plot zodat deze gebruikt kunnen worden voor tekst
+        axes[1].set_axis_off()
+        axes[2].set_axis_off()
+        plt.title(f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\nkwaliteit: {self.descriptionquality}', x=0.05, y=0.09, ha='left', fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        plt.savefig(fname=f'./output/{self.testid}.png')
+        plt.close('all')
 
         # TODO: toevoegen van specialMaterial?
