@@ -1,0 +1,69 @@
+# choose directory or file for selection
+import tkinter as tk
+from tkinter import filedialog
+import os
+from cpt_reader import Cpt
+
+main_win = tk.Tk()
+
+logo1 = tk.PhotoImage(file='./img/LogoAmsterdam.png')
+tk.Label(main_win, image=logo1).place(x=15, y=95)
+
+logo2 = tk.PhotoImage(file='./img/LogoWapen_van_amsterdam.png')
+tk.Label(main_win, image=logo2).place(x=15, y=5)
+
+script_version = ''
+script_name = 'Thomas van der Linden'
+tk.Label(main_win, text='Plot GEF Python Script ', fg='black', font='Courier 16 bold').pack()
+tk.Label(main_win, text='Lees GEF bestanden in map met Python =) of kies één of meerdere GEF-file(s)', fg='black', font='Courier 12').pack()
+tk.Label(main_win, text = 'Script: ' + script_name, fg='grey', font='Courier 10').place(x=800, y=280)
+tk.Label(main_win, text = 'Versie: ' + script_version, fg='grey', font='Courier 10').place(x=1095, y=280)
+
+main_win.geometry("1200x300")
+main_win.sourceFolder = ' '
+main_win.sourceFiles = '  '
+main_win.sourceFile = '   '
+
+def chooseDir():
+    main_win.sourceFolder = filedialog.askdirectory(parent=main_win, title='Please select a directory')
+
+b_chooseDir = tk.Button(main_win, text="Select Folder", width=20, height= 3, command=chooseDir)
+b_chooseDir.place(x=335, y=95)
+b_chooseDir.width = 100
+b_chooseDir.config(font=('Courier 14'))
+
+def chooseFiles():
+    main_win.sourceFiles = filedialog.askopenfilenames(parent=main_win, title='Please select a directory', filetypes=(("GEF-files","*.GEF"),("gef-files","*.gef")))
+
+b_chooseFiles = tk.Button(main_win, text="Select File(s)", width=20, height=3, command=chooseFiles)
+b_chooseFiles.place(x=635, y=95)
+b_chooseFiles.width = 100
+b_chooseFiles.config(font=('Courier 14'))
+
+def ContinueButton():
+    main_win.destroy()
+
+b_ContinueButton = tk.Button(text="Continue", width=20, height=3, command=ContinueButton)
+b_ContinueButton.place(x=635, y=195)
+b_ContinueButton.width = 100
+b_ContinueButton.config(font=('Courier 14 bold'))
+
+main_win.mainloop()
+
+if len(main_win.sourceFiles) > 2: # een lege lijst heeft lengte 2
+    for f in main_win.sourceFiles:
+        print(f)
+        cpt = Cpt()
+        cpt.load_gef(f)
+        cpt.plot()
+
+elif len(main_win.sourceFolder) > 3: # een leeg resultaat heeft lengte 3
+    filelist = os.listdir(main_win.sourceFolder)
+    files = [f'{main_win.sourceFolder}/{f}' for f in filelist if f.lower().endswith('gef')]
+    for f in files:
+        cpt = Cpt()
+        cpt.load_gef(f)
+        cpt.plot(main_win.sourceFolder)
+
+
+# TODO: automatisch herkennen boringen en sonderingen = zit in #PROCEDURECODE of #PROCEDURECODE
