@@ -18,6 +18,38 @@ from datetime import date, datetime
 from shapely.geometry import Point
 import geopandas as gpd
 
+
+@dataclass
+class Test():
+    def __init__(self):
+        self.type = str()
+    
+    def load_gef(self, gefFile):
+        procedure_pattern = re.compile(r'#PROCEDURECODE\s*=\s*(?P<procedure>.*)\s*')
+        report_pattern = re.compile(r'#REPORTCODE\s*=\s*(?P<report>.*)\s*')
+        
+        with open(gefFile) as f:
+            raw_gef = f.read()
+        try:
+            match = re.search(procedure_pattern, raw_gef)
+            procedure = match.group('procedure')
+            if 'CPT' in procedure.upper():
+                return 'cpt'
+            elif 'BORE' in procedure.upper():
+                return 'bore'
+        except:
+            pass
+
+        try:
+            match = re.search(report_pattern, raw_gef)
+            report = match.group('report')
+            if 'CPT' in report.upper():
+                return 'cpt'
+            elif 'BORE' in report.upper():
+                return 'bore'
+        except:
+            pass
+        
 @dataclass
 class Cpt():
     def __init__(self):
@@ -360,7 +392,7 @@ class Cpt():
         # gelijk aan finaldepth in xml
         self.finaldepth = self.data["depth"].max()
 
-    def plot(self):
+    def plot(self, path='./output'):
         if self.groundlevel == None:
             self.groundlevel = 0
 
@@ -444,7 +476,7 @@ class Cpt():
                 plt.savefig(fname=f"./output/{self.projectid}_{self.testid}.png")
                 plt.close('all')
             elif self.projectname is not None:
-                plt.savefig(fname=f"./output/{self.projectname}_{self.testid}.png")
+                plt.savefig(fname=f"{path}/{self.projectname}_{self.testid}.png")
                 plt.close('all')
 
 @dataclass
@@ -781,13 +813,13 @@ class Bore():
         components = []
         for row in self.soillayers.itertuples():
             componentsRow = {}
-            material = getattr(row, 'soilName')
-            if 'NBE' not in material:
-                match = re.search(material_pattern, material)
-                main = match.group('main')
-            else:
+            material = str(getattr(row, 'soilName')) # kreeg een keer 0 als material, vandaar de str
+            if 'NBE' in material or '0' in material:
                 main = 'N'
                 secondQuantity, thirdQuantity, fourthQuantity = 0, 0, 0
+            else:
+                match = re.search(material_pattern, material)
+                main = match.group('main')
 
             try:
                 match = re.search(material_pattern, material)
@@ -851,7 +883,7 @@ class Bore():
         self.soillayers["components"] = components
 
 
-    def plot(self):
+    def plot(self, path='./output'):
         # maak een eenvoudige plot van een boring
         uppers = list(self.soillayers["upper_NAP"])
         lowers = list(self.soillayers["lower_NAP"])
@@ -867,7 +899,7 @@ class Bore():
 
         components = list(self.soillayers["components"])
         colorsDict = {1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple", 999: "black"}
-        hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "\\\\\\", 3:""}
+        hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "\\\\\\", 3:"", 999: ""}
         for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
             left = 0
             for comp, nr in component.items():
@@ -898,7 +930,7 @@ class Bore():
         axes[2].set_axis_off()
         plt.title(f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\nkwaliteit: {self.descriptionquality}', x=0.05, y=0.09, ha='left', fontsize=14, fontweight='bold')
         plt.tight_layout()
-        plt.savefig(fname=f'./output/{self.testid}.png')
+        plt.savefig(fname=f'{path}/{self.testid}.png')
         plt.close('all')
 
         # TODO: toevoegen van specialMaterial?

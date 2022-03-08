@@ -2,7 +2,7 @@
 import tkinter as tk
 from tkinter import filedialog
 import os
-from cpt_reader import Cpt
+from cpt_reader import Cpt, Bore, Test
 
 main_win = tk.Tk()
 
@@ -52,18 +52,34 @@ main_win.mainloop()
 
 if len(main_win.sourceFiles) > 2: # een lege lijst heeft lengte 2
     for f in main_win.sourceFiles:
-        print(f)
-        cpt = Cpt()
-        cpt.load_gef(f)
-        cpt.plot()
+        try:
+            testType = Test().load_gef(f)
+            if testType == 'cpt':
+                cpt = Cpt()
+                cpt.load_gef(f)
+                cpt.plot()
+            elif testType == 'bore':
+                bore = Bore()
+                bore.load_gef(f)
+                bore.plot()
+        except:
+            print(f'{f} mist type')
+            pass
 
 elif len(main_win.sourceFolder) > 3: # een leeg resultaat heeft lengte 3
     filelist = os.listdir(main_win.sourceFolder)
     files = [f'{main_win.sourceFolder}/{f}' for f in filelist if f.lower().endswith('gef')]
     for f in files:
-        cpt = Cpt()
-        cpt.load_gef(f)
-        cpt.plot(main_win.sourceFolder)
-
-
-# TODO: automatisch herkennen boringen en sonderingen = zit in #PROCEDURECODE of #PROCEDURECODE
+        try:
+            testType = Test().load_gef(f)
+            if testType == 'cpt':
+                cpt = Cpt()
+                cpt.load_gef(f)
+                cpt.plot(main_win.sourceFolder)
+            elif testType == 'bore':
+                bore = Bore()
+                bore.load_gef(f)
+                bore.plot(main_win.sourceFolder)
+        except:
+            print(f'{f} mist type')
+            pass
