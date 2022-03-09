@@ -50,8 +50,8 @@ b_ContinueButton.config(font=('Courier 14 bold'))
 
 main_win.mainloop()
 
-if len(main_win.sourceFiles) > 2: # een lege lijst heeft lengte 2
-    for f in main_win.sourceFiles:
+if len(main_win.sourceFiles) >= 1: 
+    for f in list(main_win.sourceFiles):
         try:
             testType = Test().load_gef(f)
             if testType == 'cpt':
