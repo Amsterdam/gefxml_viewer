@@ -65,7 +65,7 @@ if len(main_win.sourceFolder) > 3: # een leeg resultaat heeft lengte 3
                 bore.load_gef(f)
                 bore.plot(main_win.sourceFolder)
         except:
-            print(f'{f} mist type')
+            print(f'{f} fout in bestand')
             pass
 
 elif len(main_win.sourceFiles) >= 1: 
@@ -81,5 +81,5 @@ elif len(main_win.sourceFiles) >= 1:
                 bore.load_gef(f)
                 bore.plot()
         except:
-            print(f'{f} mist type')
+            print(f'{f} fout in bestand')
             pass
