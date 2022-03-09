@@ -7,6 +7,7 @@ Geschreven door Thomas van der Linden, Ingenieursbureau Amsterdam
 """
 
 from dataclasses import dataclass
+from nntplib import NNTPDataError
 from typing import List
 import pandas as pd
 from io import StringIO
@@ -482,6 +483,10 @@ class Cpt():
 @dataclass
 class Bore():
     def __init__(self):
+        self.projectid = None
+        self.projectname = None
+        self.companyid = None
+        self.testid = None
         self.easting = None
         self.northing = None
         self.groundlevel = None
@@ -701,7 +706,13 @@ class Bore():
         xydxdy_id_pattern = re.compile(r'#XYID\s*=\s*(?P<coordsys>\d*)\s*,\s*(?P<X>\d*.?\d*)\s*,\s*(?P<Y>\d*.?\d*)\s*,\s*(?P<dx>\d*.?\d*),\s*(?P<dy>\d*.?\d*)\s*')
         z_id_pattern = re.compile(r'#ZID\s*=\s*(?P<refsystem>\d*),\s*(?P<Z>\d*\.?\d*)(,\s*(?P<dZ>\d*\.?\d*))')
         zdz_id_pattern = re.compile(r'#ZID\s*=\s*(?P<datum>\d*)\s*,\s*(?P<Z>.*)\s*,\s*(?P<dZ>.*)\s*')
-        
+
+        companyid_pattern = re.compile(r'#COMPANYID\s*=\s*(?P<companyid>.*),\s*\w*,\s*\d*\s*')
+        projectid_pattern = re.compile(r'#PROJECTID\s*=\s*(?P<projectid>\d*)\s*')
+        projectname_pattern = re.compile(r'#PROJECTNAME\s*=\s*(?P<projectname>.*)\s*')
+        companyid_in_measurementext_pattern = re.compile(r'#MEASUREMENTTEXT\s*=\s*\d*,\s*(?P<companyid>.*),\s*boorbedrijf\s*')
+        projectname_in_measurementtext_pattern = re.compile(r'#MEASUREMENTTEXT\s*=\s*\d*,\s*(?P<projectname>.*),\s*projectnaam\s*')
+
         data_pattern = re.compile(r'#EOH\s*=\s*(?P<data>(.*\n)*)')
 
         columnvoid_pattern = re.compile(r'#COLUMNVOID\s*=\s*(?P<columnnr>\d*),\s*(?P<voidvalue>.*)\s*')
@@ -753,6 +764,33 @@ class Bore():
             self.soillayers = match.group('data')
         except:
             pass
+
+        try:
+            match = re.search(companyid_pattern, gef_raw)
+            self.companyid = match.group('companyid')
+        except:
+            pass
+        try:
+            match = re.search(projectid_pattern, gef_raw)
+            self.projectid = match.group('projectid')
+        except:
+            pass
+        try:
+            match = re.search(projectname_pattern, gef_raw)
+            self.projectname = match.group('projectname')
+        except:
+            pass
+        try:
+            match = re.search(companyid_in_measurementext_pattern, gef_raw)
+            self.companyid = match.group('companyid')
+        except:
+            pass
+        try:
+            match = re.search(projectname_in_measurementtext_pattern, gef_raw)
+            self.projectname = match.group('projectname')
+        except:
+            pass
+
         try:
             match = re.search(columnseparator_pattern, gef_raw)
             self.columnseparator = match.group('columnseparator')

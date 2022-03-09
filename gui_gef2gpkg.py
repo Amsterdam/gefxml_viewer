@@ -2,6 +2,9 @@
 import tkinter as tk
 from tkinter import filedialog
 import os
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point
 from cpt_reader import Cpt, Bore, Test
 
 main_win = tk.Tk()
@@ -14,7 +17,7 @@ tk.Label(main_win, image=logo2).place(x=15, y=5)
 
 script_version = ''
 script_name = 'Thomas van der Linden'
-tk.Label(main_win, text='Plot GEF Python Script ', fg='black', font='Courier 16 bold').pack()
+tk.Label(main_win, text='GEF to gpkg Python Script ', fg='black', font='Courier 16 bold').pack()
 tk.Label(main_win, text='Lees GEF bestanden in map met Python =) of kies één of meerdere GEF-file(s)', fg='black', font='Courier 12').pack()
 tk.Label(main_win, text = 'Script: ' + script_name, fg='grey', font='Courier 10').place(x=800, y=280)
 tk.Label(main_win, text = 'Versie: ' + script_version, fg='grey', font='Courier 10').place(x=1095, y=280)
@@ -49,27 +52,56 @@ b_ContinueButton.config(font=('Courier 14 bold'))
 
 main_win.mainloop()
 
-def plot_tests(files, output):
+projectids = []
+projectnames = []
+companies = []
+tests = []
+geometries = []
+types = []
+df = pd.DataFrame()
+
+def gef2gpkg(files):
     for f in files:
         try:
             testType = Test().load_gef(f)
             if testType == 'cpt':
                 cpt = Cpt()
                 cpt.load_gef(f)
-                cpt.plot(output)
+                projectids.append(cpt.projectid)
+                projectnames.append(cpt.projectname)
+                tests.append(cpt.testid)
+                companies.append(cpt.companyid)
+                geometries.append(Point(cpt.easting, cpt.northing))
+                types.append('CPT')
+
             elif testType == 'bore':
                 bore = Bore()
                 bore.load_gef(f)
-                bore.plot(output)
+                projectids.append(bore.projectid)
+                projectnames.append(bore.projectname)
+                tests.append(bore.testid)
+                companies.append(bore.companyid)
+                geometries.append(Point(bore.easting, bore.northing))
+                types.append('BORE')
         except:
             print(f'{f} fout in bestand')
             pass
 
+    df["projectid"] = projectids
+    df["projectname"] = projectnames
+    df["test"] = tests
+    df["company"] = companies
+    df["type"] = types
+    gdf = gpd.GeoDataFrame(df, geometry=geometries).set_crs("EPSG:28992")
+    return gdf 
+
 if main_win.sourceFolder != '':
     filelist = os.listdir(main_win.sourceFolder)
     files = [f'{main_win.sourceFolder}/{f}' for f in filelist if f.lower().endswith('gef')]
-    plot_tests(files, main_win.sourceFolder)
+    gdf = gef2gpkg(files)
+    gdf.to_file(f'{main_win.sourceFolder}/GEF.gpkg', driver='GPKG')
 
 elif len(main_win.sourceFiles) >= 1: 
     files = list(main_win.sourceFiles)
-    plot_tests(files, './output/')
+    gdf = gef2gpkg(files)
+    gdf.to_file(f'./output/GEF.gpkg', driver='GPKG')
