@@ -50,23 +50,7 @@ b_ContinueButton.config(font=('Courier 14 bold'))
 
 main_win.mainloop()
 
-if len(main_win.sourceFiles) >= 1: 
-    for f in list(main_win.sourceFiles):
-        try:
-            testType = Test().load_gef(f)
-            if testType == 'cpt':
-                cpt = Cpt()
-                cpt.load_gef(f)
-                cpt.plot()
-            elif testType == 'bore':
-                bore = Bore()
-                bore.load_gef(f)
-                bore.plot()
-        except:
-            print(f'{f} mist type')
-            pass
-
-elif len(main_win.sourceFolder) > 3: # een leeg resultaat heeft lengte 3
+if len(main_win.sourceFolder) > 3: # een leeg resultaat heeft lengte 3
     filelist = os.listdir(main_win.sourceFolder)
     files = [f'{main_win.sourceFolder}/{f}' for f in filelist if f.lower().endswith('gef')]
     for f in files:
@@ -80,6 +64,22 @@ elif len(main_win.sourceFolder) > 3: # een leeg resultaat heeft lengte 3
                 bore = Bore()
                 bore.load_gef(f)
                 bore.plot(main_win.sourceFolder)
+        except:
+            print(f'{f} mist type')
+            pass
+
+elif len(main_win.sourceFiles) >= 1: 
+    for f in list(main_win.sourceFiles):
+        try:
+            testType = Test().load_gef(f)
+            if testType == 'cpt':
+                cpt = Cpt()
+                cpt.load_gef(f)
+                cpt.plot()
+            elif testType == 'bore':
+                bore = Bore()
+                bore.load_gef(f)
+                bore.plot()
         except:
             print(f'{f} mist type')
             pass
