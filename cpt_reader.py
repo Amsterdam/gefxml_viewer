@@ -1,10 +1,14 @@
 """
-Script om sonderingen in te lezen vanuit GEF of XML
-en sonderingen plotten
-
-Geschreven door Thomas van der Linden, Ingenieursbureau Amsterdam
-19 oktober 2021
+Script om sonderingen en boringen vanuit GEF of XML (BRO) in te lezen en te plotten
 """
+
+__author__ = "Thomas van der Linden"
+__credits__ = ""
+__license__ = "MPL-2.0"
+__version__ = ""
+__maintainer__ = "Thomas van der Linden"
+__email__ = "t.van.der.linden@amsterdam.nl"
+__status__ = "Dev"
 
 from dataclasses import dataclass
 from nntplib import NNTPDataError
@@ -50,7 +54,18 @@ class Test():
                 return 'bore'
         except:
             pass
-        
+
+    def load_xml(self, xmlFile):
+        with open(xmlFile) as f:
+            raw_xml = f.read()
+
+        # TODO: dit kan beter, maar er lijkt niet echt een standaard te zijn
+        if 'CPTSTANDARD' in raw_xml.upper():
+            return 'cpt'
+        else:
+            return 'bore'
+
+
 @dataclass
 class Cpt():
     def __init__(self):
@@ -59,7 +74,7 @@ class Cpt():
         self.groundlevel = -9999
         self.srid = None
         self.testid = None
-        self.reportdate = None
+        self.date = None
         self.finaldepth = None
         self.removedlayers = {}
         self.data = None
@@ -118,7 +133,7 @@ class Cpt():
             pass
         try:
             match = re.search(report_date_pattern, xml_raw)
-            self.reportdate = match.group('report_date')
+            self.date = match.group('report_date')
         except:
             pass
         try:
@@ -290,7 +305,7 @@ class Cpt():
             match = re.search(startdate_pattern, gef_raw)
             startdatestring = match.group('startdate')
             startdatelist = [int(x) for x in startdatestring.split(',')]
-            self.startdate = date(startdatelist[0], startdatelist[1], startdatelist[2])
+            self.date = date(startdatelist[0], startdatelist[1], startdatelist[2])
         except:
             pass
         try:
@@ -451,7 +466,7 @@ class Cpt():
 
         axes[-1].set_axis_off()
         plt.text(0.05, 0.6, f'Sondering: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\n', ha='left', va='top', fontsize=14, fontweight='bold')
-        plt.text(0.35, 0.6, f'Uitvoerder: {self.companyid}\nDatum: {self.reportdate}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', ha='left', va='top', fontsize=14, fontweight='bold')
+        plt.text(0.35, 0.6, f'Uitvoerder: {self.companyid}\nDatum: {self.date}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', ha='left', va='top', fontsize=14, fontweight='bold')
         plt.text(0.05, 0, 'Ingenieursbureau Gemeente Amsterdam Vakgroep Geotechniek Python ', fontsize=13.5)
 
         for ax in axes:
@@ -492,7 +507,7 @@ class Bore():
         self.groundlevel = None
         self.srid = None
         self.testid = None
-        self.reportdate = None
+        self.date = None
         self.finaldepth = None
         self.soillayers = []
         self.sandlayers = []
@@ -517,18 +532,21 @@ class Bore():
         # TODO: met """ i.p.v. ' ' + ' '
         soil_pattern = re.compile(r'<.*:layer>\s*' + 
                                     r'<.*:upperBoundary uom="m">(?P<layerUpper>\d*.?\d*)</.*:upperBoundary>\s*' +
-                                    r'<.*:upperBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod">.*</.*:upperBoundaryDetermination>\s*' +
+                                    r'<.*:upperBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod" (xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>.*</.*:upperBoundaryDetermination>\s*' +
                                     r'<.*:lowerBoundary uom="m">(?P<layerLower>\d*.?\d*)</.*:lowerBoundary>\s*' +
-                                    r'<.*:lowerBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod">.*</.*:lowerBoundaryDetermination>\s*' +
+                                    r'<.*:lowerBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod" (xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>.*</.*:lowerBoundaryDetermination>\s*' +
                                     r'<.*:anthropogenic>(?P<anthropogenic>.*)</.*:anthropogenic>\s*' +
                                     r'(<.*:slant>(?P<slant>.*)</.*:slant>\s*)?' +
                                     r'(<.*:internalStructureIntact>(?P<internalstructure>.*)</.*:internalStructureIntact>\s*)?' +
                                     r'(<.*:bedded>(?P<bedded>.*)</.*:bedded>\s*)?' +
                                     r'(<.*:compositeLayer>(?P<compositelayer>.*)</.*:compositeLayer>\s*)?'
                                     r'<.*:soil>\s*' +
-                                        r'<.*:geotechnicalSoilName codeSpace="urn:bro:bhrgt:GeotechnicalSoilName">(?P<soilName>.*)</.*:geotechnicalSoilName>\s*' +
+                                        r'<.*:geotechnicalSoilName codeSpace="urn:bro:bhrgt:GeotechnicalSoilName" (xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>(?P<soilNameBRO>.*)</.*:geotechnicalSoilName>\s*' +
+                                        r'(<.*:soilNameNEN5104 codeSpace="urn:bro:bhrgt:SoilNameNEN5104">(?P<soilNameNEN5104>.*)</.*:soilNameNEN5104>\s*)?' +
+                                        r'(<.*:gravelContentClassNEN5104 codeSpace="urn:bro:bhrgt:GravelContentClassNEN5104">(?P<gravelContent>.*)</.*:gravelContentClassNEN5104>\s*)?' + 
+                                        r'(<.*:organicMatterContentClassNEN5104 codeSpace="urn:bro:bhrgt:OrganicMatterContentClassNEN5104">(?P<organicMatterContent>.*)</.*:organicMatterContentClassNEN5104>\s*)?' +
                                         r'(<.*:tertiaryConstituent codeSpace="urn:bro:bhrgt:TertiaryConstituent">(?P<tertiaryConstituent>.*)</.*:tertiaryConstituent>\s*)?' +
-                                        r'(<.*:colour codeSpace="urn:bro:bhrgt:Colour">(?P<colour>.*)</.*:colour>\s*)?' +
+                                        r'(<.*:colour codeSpace="urn:bro:bhrgt:Colour" (xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>(?P<colour>.*)</.*:colour>\s*)?' +
                                         r'(<.*:dispersedInhomogeneity codeSpace="urn:bro:bhrgt:DispersedInhomogeneity">(?P<inhomogeneity>.*)</.*:dispersedInhomogeneity>\s*)?')
 
         sand_pattern = re.compile(      r'(<.*:carbonateContentClass codeSpace="urn:bro:bhrgt:CarbonateContentClass">(?P<carbonatecontent>.*)</.*:carbonateContentClass>\s*)?' +
@@ -589,7 +607,7 @@ class Bore():
         try:
             match = re.search(report_date_pattern, xml_raw)
             reportdateString = match.group('reportDate')
-            self.reportdate = datetime.strptime(reportdateString, '%Y-%m-%d')
+            self.date = datetime.strptime(reportdateString, '%Y-%m-%d')
         except:
             pass
         try:
@@ -604,10 +622,11 @@ class Bore():
             pass
         try:
             matches = re.finditer(soil_pattern, xml_raw)
-            for i, match in enumerate(matches):
+            for match in matches:
                 layerupper = float(match.group('layerUpper'))
                 layerlower = float(match.group('layerLower'))
-                soilname = match.group('soilName')
+                soilname = match.group('soilNameBRO')
+                soilname = match.group('soilNameNEN5104')
                 anthropogenic = match.group('anthropogenic')
                 tertiary = match.group('tertiaryConstituent')
                 colour = match.group('colour')
@@ -638,16 +657,19 @@ class Bore():
         except:
             pass
         
-        self.metadata = {"easting": self.easting, "northing": self.northing, "groundlevel": self.groundlevel, "testid": self.testid, "reportdate": self.reportdate, "finaldepth": self.finaldepth}
+        self.metadata = {"easting": self.easting, "northing": self.northing, "groundlevel": self.groundlevel, "testid": self.testid, "date": self.date, "finaldepth": self.finaldepth}
 
         # voeg eigenschappen toe die afhankelijk zijn van het hoofdmateriaal
         for layer in self.soillayers:
-            if layer["soilName"].lower().endswith("zand") and len(self.sandlayers) > 0:
-                layer["sandproperties"] = self.sandlayers.pop(0)
-            elif layer["soilName"].lower().endswith("klei") and len(self.claylayers) > 0:
-                layer["clayproperties"] = self.claylayers.pop(0)
-            elif layer["soilName"].lower().endswith("veen") and len(self.peatlayers) > 0:
-                layer["peatproperties"] = self.peatlayers.pop(0)
+            if layer["soilName"] is not None:
+                if layer["soilName"].lower().endswith("zand") and len(self.sandlayers) > 0:
+                    layer["sandproperties"] = self.sandlayers.pop(0)
+                elif layer["soilName"].lower().endswith("klei") and len(self.claylayers) > 0:
+                    layer["clayproperties"] = self.claylayers.pop(0)
+                elif layer["soilName"].lower().endswith("veen") and len(self.peatlayers) > 0:
+                    layer["peatproperties"] = self.peatlayers.pop(0)
+            else:
+                layer["soilName"] = "NBE"
         
         # zet om in een dataframe om het makkelijker te verwerken
         self.soillayers = pd.DataFrame(self.soillayers)
@@ -656,13 +678,14 @@ class Bore():
         # van https://github.com/cemsbv/pygef/blob/master/pygef/broxml.py
         material_components = ["gravel_component", "sand_component", "clay_component", "loam_component", "peat_component", "silt_component"]
         soil_names_dict_lists = {
-            "betonOngebroken": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # specialMaterial
+            "betonOngebroken": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # specialMaterial
             "keitjes": [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             "klei": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
             "kleiigVeen": [0.0, 0.0, 0.3, 0.0, 0.7, 0.0],
             "kleiigZand": [0.0, 0.7, 0.3, 0.0, 0.0, 0.0],
             "kleiigZandMetGrind": [0.05, 0.65, 0.3, 0.0, 0.0, 0.0],
-            "puin": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # specialMaterial
+            "NBE": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], # specialMaterial
+            "puin": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # specialMaterial
             "siltigZand": [0.0, 0.7, 0.0, 0.0, 0.0, 0.3],
             "siltigZandMetGrind": [0.05, 0.65, 0.0, 0.0, 0.0, 0.3],
             "sterkGrindigZand": [0.3, 0.7, 0.0, 0.0, 0.0, 0.0],
@@ -675,6 +698,8 @@ class Bore():
             "zand": [0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
             "zwakGrindigZand": [0.1, 0.9, 0.0, 0.0, 0.0, 0.0],
             "zwakGrindigeKlei": [0.1, 0.0, 0.9, 0.0, 0.0, 0.0],
+            "zwakSiltigZand": [0.0, 0.9, 0.0, 0.0, 0.0, 0.1],
+            "zwakSiltigeKlei": [0.0, 0.0, 0.9, 0.0, 0.0, 0.1],
             "zwakZandigGrind": [0.9, 0.1, 0.0, 0.0, 0.0, 0.0],
             "zwakZandigVeen": [0.0, 0.1, 0.0, 0.0, 0.9, 0.0],
             "zwakZandigeKlei": [0.0, 0.1, 0.9, 0.0, 0.0, 0.0],
@@ -900,7 +925,7 @@ class Bore():
 
             mainQuantity = 1 - secondQuantity - thirdQuantity - fourthQuantity
 
-            material_components = {"G": 0, "Z": 1, "K": 2, "S": 5, "V": 4, "L": 3, "H": 4, "N": 999}
+            material_components = {"G": 0, "Z": 1, "K": 2, "S": 5, "V": 4, "L": 3, "H": 4, "N": 6}
 
             componentsRow[mainQuantity] = material_components[main]
             try:
@@ -936,8 +961,8 @@ class Bore():
         axes.append(fig.add_subplot(gs[1,:]))
 
         components = list(self.soillayers["components"])
-        colorsDict = {1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple", 999: "black"}
-        hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "\\\\\\", 3:"", 999: ""}
+        colorsDict = {1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple", 6: "black"}
+        hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "\\\\\\", 3:"", 6: ""}
         for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
             left = 0
             for comp, nr in component.items():
@@ -951,11 +976,11 @@ class Bore():
         # voeg de beschrijving toe
         for layer in self.soillayers.itertuples():
             y = (getattr(layer, "lower_NAP") + getattr(layer, "upper_NAP")) / 2
+            propertiesText = ""
             for materialproperties in ["clayproperties", "sandproperties", "peatproperties", "materialproperties"]:
                 try:
                     properties = getattr(layer, materialproperties)
-                    propertiesText = ""
-                    for key, value in properties.items():
+                    for value in properties.values():
                         propertiesText += f', {value}'
                 except:
                     pass
@@ -966,9 +991,7 @@ class Bore():
         # verberg de assen van de onderste plot en rechtse plot zodat deze gebruikt kunnen worden voor tekst
         axes[1].set_axis_off()
         axes[2].set_axis_off()
-        plt.title(f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\nkwaliteit: {self.descriptionquality}', x=0.05, y=0.09, ha='left', fontsize=14, fontweight='bold')
+        plt.title(f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\nkwaliteit: {self.descriptionquality}\ndatum: {self.date}', x=0.05, y=0.09, ha='left', fontsize=14, fontweight='bold')
         plt.tight_layout()
         plt.savefig(fname=f'{path}/{self.testid}.png')
         plt.close('all')
-
-        # TODO: toevoegen van specialMaterial?

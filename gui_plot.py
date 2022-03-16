@@ -32,7 +32,7 @@ b_chooseDir.width = 100
 b_chooseDir.config(font=('Courier 14'))
 
 def chooseFiles():
-    main_win.sourceFiles = filedialog.askopenfilenames(parent=main_win, title='Please select a directory', filetypes=(("GEF-files","*.GEF"),("gef-files","*.gef")))
+    main_win.sourceFiles = filedialog.askopenfilenames(parent=main_win, title='Please select a directory')
 
 b_chooseFiles = tk.Button(main_win, text="Select File(s)", width=20, height=3, command=chooseFiles)
 b_chooseFiles.place(x=635, y=95)
@@ -51,23 +51,39 @@ main_win.mainloop()
 
 def plot_tests(files, output):
     for f in files:
-        try:
-            testType = Test().load_gef(f)
-            if testType == 'cpt':
-                cpt = Cpt()
-                cpt.load_gef(f)
-                cpt.plot(output)
-            elif testType == 'bore':
-                bore = Bore()
-                bore.load_gef(f)
-                bore.plot(output)
-        except:
-            print(f'{f} fout in bestand')
-            pass
+        print(f)
+        if f.lower().endswith('gef'):
+            try:
+                testType = Test().load_gef(f)
+                if testType == 'cpt':
+                    cpt = Cpt()
+                    cpt.load_gef(f)
+                    cpt.plot(output)
+                elif testType == 'bore':
+                    bore = Bore()
+                    bore.load_gef(f)
+                    bore.plot(output)
+            except:
+                print(f'{f} fout in bestand')
+                pass
+        elif f.lower().endswith('xml'):
+            try:
+                testType = Test().load_xml(f)
+                if testType == 'cpt':
+                    cpt = Cpt()
+                    cpt.load_xml(f)
+                    cpt.plot(output)
+                elif testType == 'bore':
+                    bore = Bore()
+                    bore.load_xml(f)
+                    bore.plot(output)
+            except:
+                print(f'{f} fout in bestand')
+                pass
 
 if main_win.sourceFolder != '':
     filelist = os.listdir(main_win.sourceFolder)
-    files = [f'{main_win.sourceFolder}/{f}' for f in filelist if f.lower().endswith('gef')]
+    files = [f'{main_win.sourceFolder}/{f}' for f in filelist]
     plot_tests(files, main_win.sourceFolder)
 
 elif len(main_win.sourceFiles) >= 1: 
