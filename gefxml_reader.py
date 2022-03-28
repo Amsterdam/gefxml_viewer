@@ -422,63 +422,96 @@ class Cpt():
         # TODO: dit kunnen we ook op dezelfde manier doen als bij de boringen, zodat de verticale schaal altijd hetzelfde is
         # TODO: dat is wel lastiger met pdf maken
 
+        colors = {'qc': 'red', 'fs': 'blue', 'Rf': 'green', 'inclination': 'grey', 'porepressure': 'black'}
         fig = plt.figure(figsize=(8.3 * 2,11.7 * 2)) # 8.3 x 11.7 inch is een A4
-        gs = GridSpec(2, 5, height_ratios=[10,1], width_ratios=[5, 1, 1, 1, 1] , figure=fig)
-        
-        axes = []
-        for i in range(5):
-            if i == 0:
-                axes.append(fig.add_subplot(gs[0, i])) 
-            else:    
-                axes.append(fig.add_subplot(gs[0, i], sharey=axes[0]))
+        gs = GridSpec(2, 1, height_ratios=[10,1])
 
-        axes.append(fig.add_subplot(gs[1,:]))
+        ax = fig.add_subplot(gs[0, 0])
+        axes = [ax, ax.twiny(), ax.twiny()]
 
-        axes[0].plot(self.data['coneResistance'], y, label='qc [MPa]', linewidth=1.25, color='#4b0082')
-        axes[1].plot(self.data["localFriction"], y, label='fs [MPa]', linewidth=1.25, color='blue')
-        axes[2].plot(self.data["frictionRatio"], y, label='Rf [%]', linewidth=1.25, color='red')
-        
-        inclinations = ["inclinationEW", "inclinationNS", "inclinationX", "inclinationY", "inclinationResultant"]
-        for inclination in inclinations:
-            if inclination in self.data.columns:
-                axes[3].plot(self.data[inclination], y, label=re.sub(r'inclination', '', inclination), linewidth=1.25, color='green')
-        
+        # Rf plot vanaf rechts
+        axes[2].invert_xaxis()  
+
         porePressures = ["porePressureU1", "porePressureU2", "porePressureU3"]
         for porePressure in porePressures:
-            if porePressure in self.data.columns:
-                axes[4].plot(self.data[porePressure], y, label=porePressure[-2:], linewidth=1.25, color='blue')
+            if porePressure in self.data.columns and not self.data[porePressure].isnull().all():
+                axes.append(ax.twiny())
+                axes[-1].plot(self.data[porePressure], y, label=porePressure[-2:], linewidth=1.25, color=colors['porepressure'], linestyle='-.')
+                axes[-1].set_xlabel("u [Mpa]", loc='left')
+                axes[-1].legend()
+                axes[-1].set_xlim([-1, 1])
+                axes[-1].spines['top'].set_position(('axes', 1.02))
+                axes[-1].spines['top'].set_bounds(0,1)
+                axes[-1].xaxis.label.set_color(colors['porepressure'])
+                axes[-1].set_xticks([0,0.25,0.5,0.75,1.0])
+                axes[-1].legend() 
+
+
+        # maak een plot met helling, aan de rechterkant
+        inclinations = ["inclinationEW", "inclinationNS", "inclinationX", "inclinationY", "inclinationResultant"]
+        inclination_plots = 0
+        for inclination in inclinations:
+            if inclination in self.data.columns and not self.data[inclination].isnull().all():
+                if inclination_plots == 0:
+                    axes.append(ax.twiny())
+                    axes[-1].invert_xaxis()
+                    axes[-1].set_xlim([40, 0])
+                    axes[-1].spines['top'].set_position(('axes', 1.02))
+                    axes[-1].spines['top'].set_bounds(10,0)
+                    axes[-1].set_xlabel("helling [deg]", loc='right')
+                    axes[-1].xaxis.label.set_color(colors['inclination'])
+                    axes[-1].set_xticks([0,2,4,6,8,10])
+                axes[-1].plot(self.data[inclination], y, label=re.sub(r'inclination', '', inclination), linewidth=1.25, color=colors['inclination'])
+                inclination_plots += 1
+        if inclination_plots > 0:
+            axes[-1].legend() 
+
+        # plot data
+        axes[0].plot(self.data['coneResistance'], y, label='qc [MPa]', linewidth=1.25, color=colors['qc'])
+        axes[1].plot(self.data["localFriction"], y, label='fs [MPa]', linewidth=1.25, color=colors['fs'], linestyle='--')
+        axes[2].plot(self.data["frictionRatio"], y, label='Rf [%]', linewidth=1.25, color=colors['Rf'])   
 
         # plot maaiveld, bestaat uit een streep en een arcering
         axes[0].plot(x_maaiveld, y_maaiveld, color='black')
         axes[0].barh(self.groundlevel, width=10, height=-0.4, align='edge', hatch='/\/', color='#ffffffff')
 
+        # stel de teksten in voor de labels
         axes[0].set_ylabel("Niveau [m t.o.v. NAP]")
         axes[0].set_xlabel("qc [MPa]")
-        axes[1].set_xlabel("fs [MPa]")
-        axes[2].set_xlabel("Rf [%]")
-        axes[3].set_xlabel("helling [deg]")
-        axes[4].set_xlabel("u [Mpa]")
-        axes[3].legend()
-        axes[4].legend()
+        axes[1].set_xlabel("fs [MPa]", loc='left')
+        axes[2].set_xlabel("Rf [%]", loc='right')
 
-        axes[0].set_xlim([0, 40])
-        axes[2].set_xlim([0, 12])
+        # verplaats de x-assen zodat ze niet overlappen       
+        axes[1].spines['top'].set_bounds(0,1)
+        axes[2].spines['top'].set_bounds(15,0)
 
-        axes[-1].set_axis_off()
+        # kleur de labels van de x-assen hetzelfde als de data
+        axes[0].xaxis.label.set_color(colors['qc'])
+        axes[1].xaxis.label.set_color(colors['fs'])
+        axes[2].xaxis.label.set_color(colors['Rf'])
+
+        # stel de min en max waarden van de assen in
+        axes[0].set_xlim([0, 40]) # conusweerstand
+        axes[1].set_xlim([0, 2]) # plaatselijke wrijving 
+        axes[2].set_xlim([40, 0]) # wrijvingsgetal
+        
+        axes[1].set_xticks([0,0.5,1.0])
+        axes[2].set_xticks([0,2,4,6,8,10,12])
+
+        # metadata in plot
+        stempel = fig.add_subplot(gs[1, 0])
+        stempel.set_axis_off()
         plt.text(0.05, 0.6, f'Sondering: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\n', ha='left', va='top', fontsize=14, fontweight='bold')
         plt.text(0.35, 0.6, f'Uitvoerder: {self.companyid}\nDatum: {self.date}\nProjectnummer: {self.projectid}\nProjectnaam: {self.projectname}', ha='left', va='top', fontsize=14, fontweight='bold')
         plt.text(0.05, 0, 'Ingenieursbureau Gemeente Amsterdam Vakgroep Geotechniek Python ', fontsize=13.5)
 
-        for ax in axes:
-
-            ax.minorticks_on()
-
-            ax.tick_params(which='major', color='black')
-            ax.tick_params(which='minor', color='black')
-
-            ax.grid(which='major', linestyle='-', linewidth='0.15', color='black')
-            ax.grid(which='minor', linestyle='-', linewidth='0.1')
-            ax.grid(b=True, which='both')
+        # maak het grid
+        ax.minorticks_on()
+        ax.tick_params(which='major', color='black')
+        ax.tick_params(which='minor', color='black')
+        ax.grid(which='major', linestyle='-', linewidth='0.15', color='black')
+        ax.grid(which='minor', linestyle='-', linewidth='0.1')
+        ax.grid(b=True, which='both')
 
         # sla de figuur op
         plt.tight_layout()
