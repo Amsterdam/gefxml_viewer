@@ -2,7 +2,7 @@
 import tkinter as tk
 from tkinter import filedialog
 import os
-from cpt_reader import Cpt, Bore, Test
+from gefxml_reader import Cpt, Bore, Test
 
 main_win = tk.Tk()
 

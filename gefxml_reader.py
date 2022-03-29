@@ -1024,7 +1024,8 @@ class Bore():
         # verberg de assen van de onderste plot en rechtse plot zodat deze gebruikt kunnen worden voor tekst
         axes[1].set_axis_off()
         axes[2].set_axis_off()
-        plt.title(f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\nkwaliteit: {self.descriptionquality}\ndatum: {self.date}', x=0.05, y=0.09, ha='left', fontsize=14, fontweight='bold')
+        plt.text(0.05, 0.6, f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\nkwaliteit: {self.descriptionquality}\ndatum: {self.date}', fontsize=14, fontweight='bold')
+        plt.text(0.05, 0.2, 'Ingenieursbureau Gemeente Amsterdam Vakgroep Geotechniek Python ', fontsize=10)
         plt.tight_layout()
         plt.savefig(fname=f'{path}/{self.testid}.png')
         plt.close('all')
