@@ -92,7 +92,7 @@ class Cpt():
                                         r'<.*\d*:pos>(?P<X>\d*\.?\d*)\s*(?P<Y>\d*\.?\d*)</.*\d*:pos>')
         z_id_pattern = re.compile(r'<.*:offset uom="(?P<z_unit>.*)">(?P<Z>-?\d*\.?\d*)</.*:offset>')
         trajectory_pattern = re.compile(r'<.*:finalDepth uom="m">(?P<finalDepth>\d*\.?\d*)</.*:finalDepth>\s')
-        report_date_pattern = re.compile(r'<.*:researchReportDate>\s*<.*:date>(?P<report_date>\d*-\d*-\d*)</.*:date>')
+        report_date_pattern = re.compile(r'<(.*:)?researchReportDate>\s*<.*:date>(?P<report_date>\d*-\d*-\d*)</.*:date>')
         removed_layer_pattern = re.compile(r'<.*:removedLayer>\s*'+ 
                                                 r'<.*:sequenceNumber>(?P<layerNr>\d*)</.*:sequenceNumber>\s*' + 
                                                 r'<.*:upperBoundary uom="m">(?P<layerUpper>\d*\.?\d*)</.*:upperBoundary>\s*' + 
