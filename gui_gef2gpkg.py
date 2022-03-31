@@ -5,7 +5,7 @@ import os
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
-from cpt_reader import Cpt, Bore, Test
+from gefxml_reader import Cpt, Bore, Test
 
 main_win = tk.Tk()
 
