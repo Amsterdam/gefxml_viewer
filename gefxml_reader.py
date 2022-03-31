@@ -770,6 +770,7 @@ class Bore():
         projectname_pattern = re.compile(r'#PROJECTNAME\s*=\s*(?P<projectname>.*)\s*')
         companyid_in_measurementext_pattern = re.compile(r'#MEASUREMENTTEXT\s*=\s*\d*,\s*(?P<companyid>.*),\s*boorbedrijf\s*')
         projectname_in_measurementtext_pattern = re.compile(r'#MEASUREMENTTEXT\s*=\s*\d*,\s*(?P<projectname>.*),\s*projectnaam\s*')
+        filedate_pattern = re.compile(r'#FILEDATE\s*=\s*(?P<filedate>\d*,\s*\d*,\s*\d*)\s*')
 
         data_pattern = re.compile(r'#EOH\s*=\s*(?P<data>(.*\n)*)')
 
@@ -848,7 +849,13 @@ class Bore():
             self.projectname = match.group('projectname')
         except:
             pass
-
+        try:
+            match = re.search(filedate_pattern, gef_raw)
+            filedatestring = match.group('filedate')
+            filedatelist = [int(x) for x in filedatestring.split(',')]
+            self.date = date(filedatelist[0], filedatelist[1], filedatelist[2])
+        except:
+            pass
         try:
             match = re.search(columnseparator_pattern, gef_raw)
             self.columnseparator = match.group('columnseparator')
