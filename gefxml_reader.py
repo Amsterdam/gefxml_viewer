@@ -171,6 +171,34 @@ class Cpt():
         
         self.data = pd.read_csv(StringIO(self.data), names=dataColumns, sep=",", lineterminator=';')
         self.data = self.data.replace(-999999, np.nan)
+
+        # check of depth is opgenomen
+        if self.data["depth"].isna().all():
+            # verwijder de lege kolommen om het vervolg eenvoudiger te maken
+            self.data.dropna(axis=1, how='all', inplace=True)
+            # bereken diepte als inclinatie bepaald is
+            if "penetrationLength" in self.data.columns:
+                if "inclinationResultant" in self.data.columns:
+                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+                elif "inclinationEW" in self.data.columns and "inclinationNS" in self.data.columns:
+                    z = self.data["penetrationLength"].diff().abs()
+                    x = z * np.tan(np.deg2rad(self.data["inclinationEW"]))
+                    y = z * np.tan(np.deg2rad(self.data["inclinationNS"]))
+                    self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
+                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+                elif "inclinationX" and "inclinationY" in self.data.columns:
+                    z = self.data["penetrationLength"].diff().abs()
+                    x = z * np.tan(np.deg2rad(self.data["inclinationX"]))
+                    y = z * np.tan(np.deg2rad(self.data["inclinationY"]))
+                    self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
+                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+                # anders is de diepte gelijk aan de penetration length
+                else:
+                    self.data["depth"] = self.data["penetrationLength"].abs()
+
         self.data.sort_values(by="depth", inplace=True)
 
     def load_gef(self, gefFile):
@@ -373,26 +401,31 @@ class Cpt():
         # sondeerlengte als diepte gebruiken is goed genoeg als benadering
         # TODO: onderstaande blok voor diepte correctie is niet gecheckt op correctheid 
         # TODO: vraag me af of het gebruik hiervan ooit mogelijk / nodig is, want indien de hoek gemeten is, dan is meestal ook de gecorrigeerde diepte gerapporteerd
-        elif "penetrationLength" in self.data.columns:
-            if "inclinationResultant" in self.data.columns:
-                self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
-                self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
-            elif "inclinationEW" in self.data.columns and "inclinationNS" in self.data.columns:
-                z = self.data["penetrationLength"].diff().abs()
-                x = z * np.tan(np.deg2rad(self.data["inclinationEW"]))
-                y = z * np.tan(np.deg2rad(self.data["inclinationNS"]))
-                self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
-                self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
-                self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
-            elif "inclinationX" and "inclinationY" in self.data.columns:
-                z = self.data["penetrationLength"].diff().abs()
-                x = z * np.tan(np.deg2rad(self.data["inclinationX"]))
-                y = z * np.tan(np.deg2rad(self.data["inclinationY"]))
-                self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
-                self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
-                self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
-            else:
-                self.data["depth"] = self.data["penetrationLength"].abs()
+        if self.data["depth"].isna().all():
+            # verwijder de lege kolommen om het vervolg eenvoudiger te maken
+            self.data.dropna(axis=1, how='all', inplace=True)
+            # bereken diepte als inclinatie bepaald is
+            if "penetrationLength" in self.data.columns:
+                if "inclinationResultant" in self.data.columns:
+                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+                elif "inclinationEW" in self.data.columns and "inclinationNS" in self.data.columns:
+                    z = self.data["penetrationLength"].diff().abs()
+                    x = z * np.tan(np.deg2rad(self.data["inclinationEW"]))
+                    y = z * np.tan(np.deg2rad(self.data["inclinationNS"]))
+                    self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
+                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+                elif "inclinationX" and "inclinationY" in self.data.columns:
+                    z = self.data["penetrationLength"].diff().abs()
+                    x = z * np.tan(np.deg2rad(self.data["inclinationX"]))
+                    y = z * np.tan(np.deg2rad(self.data["inclinationY"]))
+                    self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
+                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+                # anders is de diepte gelijk aan de penetration length
+                else:
+                    self.data["depth"] = self.data["penetrationLength"].abs()
 
         # nan waarden geven vervelende strepen in de afbeeldingen
         self.data.dropna(subset=["depth", "coneResistance", "localFriction", "frictionRatio"], inplace=True)
@@ -553,11 +586,11 @@ class Bore():
         testid_pattern_broid = re.compile(r'<broId>\s*(?P<testid>.*)</broId>')
         testid_pattern_accountableparty = re.compile(r'<objectIdAccountableParty>\s*(?P<testid>.*)</objectIdAccountableParty>')
         xy_id_pattern_crs_first = re.compile(r'<.*:Point\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)"\s*.*:id=".*">\s*' +
-                        r'<.*:pos>(?P<X>\d*.?\d*)\s*(?P<Y>\d*.?\d*)</.*:pos>')
+                        r'<.*:pos>(?P<X>\d*\.?\d*)\s*(?P<Y>\d*\.?\d*)</.*:pos>')
         xy_id_pattern_id_first = re.compile(r'<.*:Point\s*.*:id=".*"\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)">\s*' +
-                        r'<.*:pos>(?P<X>\d*.?\d*)\s*(?P<Y>\d*.?\d*)</.*:pos>')
+                        r'<.*:pos>(?P<X>\d*\.?\d*)\s*(?P<Y>\d*\.?\d*)</.*:pos>')
         z_id_pattern = re.compile(r'<.*:offset uom="(?P<z_unit>.*)">(?P<Z>.*)</.*:offset>')
-        trajectory_pattern = re.compile(r'<.*:finalDepthBoring uom="m">(?P<finalDepth>\d*.?\d*)</.*:finalDepthBoring>')
+        trajectory_pattern = re.compile(r'<.*:finalDepthBoring uom="m">(?P<finalDepth>\d*\.?\d*)</.*:finalDepthBoring>')
         report_date_pattern = re.compile(r'<.*:descriptionReportDate>\s*<date>(?P<reportDate>\d*-\d*-\d*)</date>')
         description_quality_pattern = re.compile(r'<.*:descriptionQuality\s*codeSpace="urn:bro:bhrgt:DescriptionQuality">(?P<descriptionQuality>.*)</')
 
