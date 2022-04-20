@@ -172,32 +172,7 @@ class Cpt():
         self.data = pd.read_csv(StringIO(self.data), names=dataColumns, sep=",", lineterminator=';')
         self.data = self.data.replace(-999999, np.nan)
 
-        # check of depth is opgenomen
-        if self.data["depth"].isna().all():
-            # verwijder de lege kolommen om het vervolg eenvoudiger te maken
-            self.data.dropna(axis=1, how='all', inplace=True)
-            # bereken diepte als inclinatie bepaald is
-            if "penetrationLength" in self.data.columns:
-                if "inclinationResultant" in self.data.columns:
-                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
-                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
-                elif "inclinationEW" in self.data.columns and "inclinationNS" in self.data.columns:
-                    z = self.data["penetrationLength"].diff().abs()
-                    x = z * np.tan(np.deg2rad(self.data["inclinationEW"]))
-                    y = z * np.tan(np.deg2rad(self.data["inclinationNS"]))
-                    self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
-                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
-                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
-                elif "inclinationX" and "inclinationY" in self.data.columns:
-                    z = self.data["penetrationLength"].diff().abs()
-                    x = z * np.tan(np.deg2rad(self.data["inclinationX"]))
-                    y = z * np.tan(np.deg2rad(self.data["inclinationY"]))
-                    self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
-                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
-                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
-                # anders is de diepte gelijk aan de penetration length
-                else:
-                    self.data["depth"] = self.data["penetrationLength"].abs()
+        self.check_depth()
 
         self.data.sort_values(by="depth", inplace=True)
 
@@ -397,35 +372,7 @@ class Cpt():
         if "depth" in self.data.columns:
             self.data["depth"] = self.data["depth"].abs()
 
-        # soms is er geen diepte, maar wel sondeerlengte aanwezig
-        # sondeerlengte als diepte gebruiken is goed genoeg als benadering
-        # TODO: onderstaande blok voor diepte correctie is niet gecheckt op correctheid 
-        # TODO: vraag me af of het gebruik hiervan ooit mogelijk / nodig is, want indien de hoek gemeten is, dan is meestal ook de gecorrigeerde diepte gerapporteerd
-        if self.data["depth"].isna().all():
-            # verwijder de lege kolommen om het vervolg eenvoudiger te maken
-            self.data.dropna(axis=1, how='all', inplace=True)
-            # bereken diepte als inclinatie bepaald is
-            if "penetrationLength" in self.data.columns:
-                if "inclinationResultant" in self.data.columns:
-                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
-                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
-                elif "inclinationEW" in self.data.columns and "inclinationNS" in self.data.columns:
-                    z = self.data["penetrationLength"].diff().abs()
-                    x = z * np.tan(np.deg2rad(self.data["inclinationEW"]))
-                    y = z * np.tan(np.deg2rad(self.data["inclinationNS"]))
-                    self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
-                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
-                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
-                elif "inclinationX" and "inclinationY" in self.data.columns:
-                    z = self.data["penetrationLength"].diff().abs()
-                    x = z * np.tan(np.deg2rad(self.data["inclinationX"]))
-                    y = z * np.tan(np.deg2rad(self.data["inclinationY"]))
-                    self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
-                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
-                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
-                # anders is de diepte gelijk aan de penetration length
-                else:
-                    self.data["depth"] = self.data["penetrationLength"].abs()
+        self.check_depth()
 
         # nan waarden geven vervelende strepen in de afbeeldingen
         self.data.dropna(subset=["depth", "coneResistance", "localFriction", "frictionRatio"], inplace=True)
@@ -560,6 +507,36 @@ class Cpt():
             elif self.projectname is not None:
                 plt.savefig(fname=f"{path}/{self.projectname}_{self.testid}.png")
                 plt.close('all')
+
+    def check_depth(self):
+        # soms is er geen diepte, maar wel sondeerlengte aanwezig
+        # sondeerlengte als diepte gebruiken is goed genoeg als benadering
+        # TODO: onderstaande blok voor diepte correctie is niet gecheckt op correctheid 
+        if "depth" not in self.data.columns or self.data["depth"].isna().all():
+            # verwijder de lege kolommen om het vervolg eenvoudiger te maken
+            self.data.dropna(axis=1, how='all', inplace=True)
+            # bereken diepte als inclinatie bepaald is
+            if "penetrationLength" in self.data.columns:
+                if "inclinationResultant" in self.data.columns:
+                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+                elif "inclinationEW" in self.data.columns and "inclinationNS" in self.data.columns:
+                    z = self.data["penetrationLength"].diff().abs()
+                    x = z * np.tan(np.deg2rad(self.data["inclinationEW"]))
+                    y = z * np.tan(np.deg2rad(self.data["inclinationNS"]))
+                    self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
+                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+                elif "inclinationX" and "inclinationY" in self.data.columns:
+                    z = self.data["penetrationLength"].diff().abs()
+                    x = z * np.tan(np.deg2rad(self.data["inclinationX"]))
+                    y = z * np.tan(np.deg2rad(self.data["inclinationY"]))
+                    self.data["inclinationResultant"] = np.rad2deg(np.cos(np.sqrt(x ** 2 + y ** 2 + z ** 2) / z))
+                    self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
+                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+                # anders is de diepte gelijk aan de penetration length
+                else:
+                    self.data["depth"] = self.data["penetrationLength"].abs()
 
 @dataclass
 class Bore():
