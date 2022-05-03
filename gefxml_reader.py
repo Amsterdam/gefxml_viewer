@@ -560,8 +560,7 @@ class Bore():
     
     def load_xml(self, xmlFile):
         # lees een boring in vanuit een BRO XML
-        testid_pattern_broid = re.compile(r'<broId>\s*(?P<testid>.*)</broId>')
-        testid_pattern_accountableparty = re.compile(r'<objectIdAccountableParty>\s*(?P<testid>.*)</objectIdAccountableParty>')
+        testid_pattern_broid = re.compile(r'<.*:broId>\s*(?P<testid>.*)</.*:broId>')
         xy_id_pattern_crs_first = re.compile(r'<.*:Point\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)"\s*.*:id=".*">\s*' +
                         r'<.*:pos>(?P<X>\d*\.?\d*)\s*(?P<Y>\d*\.?\d*)</.*:pos>')
         xy_id_pattern_id_first = re.compile(r'<.*:Point\s*.*:id=".*"\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)">\s*' +
@@ -575,21 +574,22 @@ class Bore():
         # TODO: met """ i.p.v. ' ' + ' '
         soil_pattern = re.compile(r'<.*:layer>\s*' + 
                                     r'<.*:upperBoundary uom="m">(?P<layerUpper>\d*.?\d*)</.*:upperBoundary>\s*' +
-                                    r'<.*:upperBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod" (xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>.*</.*:upperBoundaryDetermination>\s*' +
+                                    r'<.*:upperBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod"( xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>.*</.*:upperBoundaryDetermination>\s*' +
                                     r'<.*:lowerBoundary uom="m">(?P<layerLower>\d*.?\d*)</.*:lowerBoundary>\s*' +
-                                    r'<.*:lowerBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod" (xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>.*</.*:lowerBoundaryDetermination>\s*' +
+                                    r'<.*:lowerBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod"( xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>.*</.*:lowerBoundaryDetermination>\s*' +
                                     r'<.*:anthropogenic>(?P<anthropogenic>.*)</.*:anthropogenic>\s*' +
                                     r'(<.*:slant>(?P<slant>.*)</.*:slant>\s*)?' +
                                     r'(<.*:internalStructureIntact>(?P<internalstructure>.*)</.*:internalStructureIntact>\s*)?' +
                                     r'(<.*:bedded>(?P<bedded>.*)</.*:bedded>\s*)?' +
                                     r'(<.*:compositeLayer>(?P<compositelayer>.*)</.*:compositeLayer>\s*)?'
+                                    r'(<.*:bedding codeSpace="urn:bro:bhrgt:Bedding">(?P<bedding>.*)</.*:bedding>\s*)?' +
                                     r'<.*:soil>\s*' +
-                                        r'<.*:geotechnicalSoilName codeSpace="urn:bro:bhrgt:GeotechnicalSoilName" (xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>(?P<soilNameBRO>.*)</.*:geotechnicalSoilName>\s*' +
+                                        r'<.*:geotechnicalSoilName codeSpace="urn:bro:bhrgt:GeotechnicalSoilName"( xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>(?P<soilNameBRO>.*)</.*:geotechnicalSoilName>\s*' +
                                         r'(<.*:soilNameNEN5104 codeSpace="urn:bro:bhrgt:SoilNameNEN5104">(?P<soilNameNEN5104>.*)</.*:soilNameNEN5104>\s*)?' +
                                         r'(<.*:gravelContentClassNEN5104 codeSpace="urn:bro:bhrgt:GravelContentClassNEN5104">(?P<gravelContent>.*)</.*:gravelContentClassNEN5104>\s*)?' + 
                                         r'(<.*:organicMatterContentClassNEN5104 codeSpace="urn:bro:bhrgt:OrganicMatterContentClassNEN5104">(?P<organicMatterContent>.*)</.*:organicMatterContentClassNEN5104>\s*)?' +
                                         r'(<.*:tertiaryConstituent codeSpace="urn:bro:bhrgt:TertiaryConstituent">(?P<tertiaryConstituent>.*)</.*:tertiaryConstituent>\s*)?' +
-                                        r'(<.*:colour codeSpace="urn:bro:bhrgt:Colour" (xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>(?P<colour>.*)</.*:colour>\s*)?' +
+                                        r'(<.*:colour codeSpace="urn:bro:bhrgt:Colour"( xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>(?P<colour>.*)</.*:colour>\s*)?' +
                                         r'(<.*:dispersedInhomogeneity codeSpace="urn:bro:bhrgt:DispersedInhomogeneity">(?P<inhomogeneity>.*)</.*:dispersedInhomogeneity>\s*)?')
 
         sand_pattern = re.compile(      r'(<.*:carbonateContentClass codeSpace="urn:bro:bhrgt:CarbonateContentClass">(?P<carbonatecontent>.*)</.*:carbonateContentClass>\s*)?' +
@@ -643,11 +643,6 @@ class Bore():
         except:
             pass
         try:
-            match = re.search(testid_pattern_accountableparty, xml_raw)
-            self.testid = match.group('testid')
-        except:
-            pass
-        try:
             match = re.search(report_date_pattern, xml_raw)
             reportdateString = match.group('reportDate')
             self.date = datetime.strptime(reportdateString, '%Y-%m-%d')
@@ -669,7 +664,7 @@ class Bore():
                 layerupper = float(match.group('layerUpper'))
                 layerlower = float(match.group('layerLower'))
                 soilname = match.group('soilNameBRO')
-                soilname = match.group('soilNameNEN5104')
+#                soilname = match.group('soilNameNEN5104')
                 anthropogenic = match.group('anthropogenic')
                 tertiary = match.group('tertiaryConstituent')
                 colour = match.group('colour')
@@ -737,6 +732,7 @@ class Bore():
             "sterkZandigSilt": [0.0, 0.3, 0.0, 0.0, 0.0, 0.7],
             "sterkZandigeKlei": [0.0, 0.3, 0.7, 0.0, 0.0, 0.0],
             "sterkZandigeKleiMetGrind": [0.05, 0.3, 0.65, 0.0, 0.0, 0.0],
+            "sterkZandigVeen": [0.0, 0.3, 0.0, 0.0, 0.7, 0.0],
             "veen": [0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
             "zand": [0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
             "zwakGrindigZand": [0.1, 0.9, 0.0, 0.0, 0.0, 0.0],
