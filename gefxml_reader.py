@@ -11,8 +11,6 @@ __email__ = "t.van.der.linden@amsterdam.nl"
 __status__ = "Dev"
 
 from dataclasses import dataclass
-from nntplib import NNTPDataError
-from typing import List
 import pandas as pd
 from io import StringIO
 import numpy as np
@@ -22,7 +20,7 @@ import matplotlib.pyplot as plt
 from datetime import date, datetime
 from shapely.geometry import Point
 import geopandas as gpd
-
+from xml.etree.ElementTree import ElementTree
 
 @dataclass
 class Test():
@@ -553,165 +551,46 @@ class Bore():
         self.date = None
         self.finaldepth = None
         self.soillayers = []
-        self.sandlayers = []
-        self.claylayers = []
-        self.peatlayers = []
         self.metadata = {}
     
     def load_xml(self, xmlFile):
         # lees een boring in vanuit een BRO XML
-        testid_pattern_broid = re.compile(r'<.*:broId>\s*(?P<testid>.*)</.*:broId>')
-        xy_id_pattern_crs_first = re.compile(r'<.*:Point\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)"\s*.*:id=".*">\s*' +
-                        r'<.*:pos>(?P<X>\d*\.?\d*)\s*(?P<Y>\d*\.?\d*)</.*:pos>')
-        xy_id_pattern_id_first = re.compile(r'<.*:Point\s*.*:id=".*"\s*srsName="urn:ogc:def:crs:EPSG::(?P<coordsys>.*)">\s*' +
-                        r'<.*:pos>(?P<X>\d*\.?\d*)\s*(?P<Y>\d*\.?\d*)</.*:pos>')
-        z_id_pattern = re.compile(r'<.*:offset uom="(?P<z_unit>.*)">(?P<Z>.*)</.*:offset>')
-        trajectory_pattern = re.compile(r'<.*:finalDepthBoring uom="m">(?P<finalDepth>\d*\.?\d*)</.*:finalDepthBoring>')
-        report_date_pattern = re.compile(r'<.*:descriptionReportDate>\s*<date>(?P<reportDate>\d*-\d*-\d*)</date>')
-        description_quality_pattern = re.compile(r'<.*:descriptionQuality\s*codeSpace="urn:bro:bhrgt:DescriptionQuality">(?P<descriptionQuality>.*)</')
+        tree = ElementTree()
+        tree.parse(xmlFile)
+        root = tree.getroot()
 
-        # TODO: dit kan worden opgesplitst, maar dan raak je wel de samenhang kwijt
-        # TODO: met """ i.p.v. ' ' + ' '
-        soil_pattern = re.compile(r'<.*:layer>\s*' + 
-                                    r'<.*:upperBoundary uom="m">(?P<layerUpper>\d*.?\d*)</.*:upperBoundary>\s*' +
-                                    r'<.*:upperBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod"( xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>.*</.*:upperBoundaryDetermination>\s*' +
-                                    r'<.*:lowerBoundary uom="m">(?P<layerLower>\d*.?\d*)</.*:lowerBoundary>\s*' +
-                                    r'<.*:lowerBoundaryDetermination codeSpace="urn:bro:bhrgt:BoundaryPositioningMethod"( xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>.*</.*:lowerBoundaryDetermination>\s*' +
-                                    r'<.*:anthropogenic>(?P<anthropogenic>.*)</.*:anthropogenic>\s*' +
-                                    r'(<.*:slant>(?P<slant>.*)</.*:slant>\s*)?' +
-                                    r'(<.*:internalStructureIntact>(?P<internalstructure>.*)</.*:internalStructureIntact>\s*)?' +
-                                    r'(<.*:bedded>(?P<bedded>.*)</.*:bedded>\s*)?' +
-                                    r'(<.*:compositeLayer>(?P<compositelayer>.*)</.*:compositeLayer>\s*)?'
-                                    r'(<.*:bedding codeSpace="urn:bro:bhrgt:Bedding">(?P<bedding>.*)</.*:bedding>\s*)?' +
-                                    r'<.*:soil>\s*' +
-                                        r'<.*:geotechnicalSoilName codeSpace="urn:bro:bhrgt:GeotechnicalSoilName"( xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>(?P<soilNameBRO>.*)</.*:geotechnicalSoilName>\s*' +
-                                        r'(<.*:soilNameNEN5104 codeSpace="urn:bro:bhrgt:SoilNameNEN5104">(?P<soilNameNEN5104>.*)</.*:soilNameNEN5104>\s*)?' +
-                                        r'(<.*:gravelContentClassNEN5104 codeSpace="urn:bro:bhrgt:GravelContentClassNEN5104">(?P<gravelContent>.*)</.*:gravelContentClassNEN5104>\s*)?' + 
-                                        r'(<.*:organicMatterContentClassNEN5104 codeSpace="urn:bro:bhrgt:OrganicMatterContentClassNEN5104">(?P<organicMatterContent>.*)</.*:organicMatterContentClassNEN5104>\s*)?' +
-                                        r'(<.*:tertiaryConstituent codeSpace="urn:bro:bhrgt:TertiaryConstituent">(?P<tertiaryConstituent>.*)</.*:tertiaryConstituent>\s*)?' +
-                                        r'(<.*:colour codeSpace="urn:bro:bhrgt:Colour"( xsi:nil="true" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance")?>(?P<colour>.*)</.*:colour>\s*)?' +
-                                        r'(<.*:dispersedInhomogeneity codeSpace="urn:bro:bhrgt:DispersedInhomogeneity">(?P<inhomogeneity>.*)</.*:dispersedInhomogeneity>\s*)?')
+        for element in root.iter():
 
-        sand_pattern = re.compile(      r'(<.*:carbonateContentClass codeSpace="urn:bro:bhrgt:CarbonateContentClass">(?P<carbonatecontent>.*)</.*:carbonateContentClass>\s*)?' +
-                                        r'<.*:organicMatterContentClass codeSpace="urn:bro:bhrgt:OrganicMatterContentClass">(?P<organicMatter>.*)</.*:organicMatterContentClass>\s*' +
-                                        r'<.*:sandMedianClass codeSpace="urn:bro:bhrgt:SandMedianClass">(?P<sandMedian>.*)</.*:sandMedianClass>\s*' +
-                                        r'<.*:grainshape>\s*' +
-                                            r'<.*:sizeFraction codeSpace="urn:bro:bhrgt:SizeFraction">(?P<sizeFraction>.*)</.*:sizeFraction>\s*' +
-                                            r'<.*:angularity codeSpace="urn:bro:bhrgt:Angularity">(?P<angularity>.*)</.*:angularity>\s*' +
-                                            r'<.*:sphericity codeSpace="urn:bro:bhrgt:Sphericity">(?P<sphericity>.*)</.*:sphericity>\s*' +
-                                        r'</.*:grainshape>\s*'
-                                    )
+            if 'broId' in element.tag:
+                self.testid = element.text
 
-        peat_pattern = re.compile(      r'(<.*:mixed>(?P<mixed>.*)</.*:mixed>\s*)?' +
-                                        r'<.*:peatType codeSpace="urn:bro:bhrgt:PeatType">(?P<type>.*)</.*:peatType>\s*' +
-                                        r'(<.*:organicSoilTexture codeSpace="urn:bro:bhrgt:OrganicSoilTexture">(?P<soiltexture>.*)</.*:organicSoilTexture>\s*)?' +
-                                        r'(<.*:organicSoilConsistency codeSpace="urn:bro:bhrgt:OrganicSoilConsistency">(?P<consistency>.*)</.*:organicSoilConsistency>\s*)?' +
-                                        r'(<.*:peatTensileStrength codeSpace="urn:bro:bhrgt:PeatTensileStrength">(?P<tensilestrength>.*)</.*:peatTensileStrength>\s*)?'
-                                    )
+            if 'deliveredLocation' in element.tag:
+                location = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter()}
+                self.easting = float(location['pos'].split()[0])
+                self.northing = float(location['pos'].split()[1])
 
-        clay_pattern = re.compile(      r'(<.*:carbonateContentClass codeSpace="urn:bro:bhrgt:CarbonateContentClass">(?P<carbonatecontent>.*)</.*:carbonateContentClass>\s*)?' +
-                                        r'<.*:organicMatterContentClass codeSpace="urn:bro:bhrgt:OrganicMatterContentClass">(?P<organicMatter>.*)</.*:organicMatterContentClass>\s*' +
-                                        r'(<.*:mixed>(?P<mixed>.*)</.*:mixed>\s*)?'+ 
-                                        r'(<.*:fineSoilConsistency codeSpace="urn:bro:bhrgt:FineSoilConsistency">(?P<consistency>.*)</.*:fineSoilConsistency>\s*)?'
-                                    )
+            elif 'deliveredVerticalPosition' in element.tag:
+                verticalPosition = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter()}
+                self.groundlevel = float(verticalPosition['offset'])
 
-        with open(xmlFile) as f:
-            xml_raw = f.read()
+            elif 'finalDepthBoring' in element.tag:
+                self.finaldepth = float(element.text)
 
-        try:
-            match = re.search(xy_id_pattern_crs_first, xml_raw)
-            self.easting = float(match.group('X'))
-            self.northing = float(match.group('Y'))
-            self.srid = match.group('coordsys')
-        except:
-            pass
-        try:
-            match = re.search(xy_id_pattern_id_first, xml_raw)
-            self.easting = float(match.group('X'))
-            self.northing = float(match.group('Y'))
-            self.srid = match.group('coordsys')
-        except:
-            pass
-        try:
-            match = re.search(z_id_pattern, xml_raw)
-            self.groundlevel = float(match.group('Z'))
-        except:
-            pass
-        try:
-            match = re.search(testid_pattern_broid, xml_raw)
-            self.testid = match.group('testid')
-        except:
-            pass
-        try:
-            match = re.search(report_date_pattern, xml_raw)
-            reportdateString = match.group('reportDate')
-            self.date = datetime.strptime(reportdateString, '%Y-%m-%d')
-        except:
-            pass
-        try:
-            match = re.search(trajectory_pattern, xml_raw)
-            self.finaldepth = float(match.group('finalDepth'))
-        except:
-            pass
-        try:
-            match = re.search(description_quality_pattern, xml_raw)
-            self.descriptionquality = match.group('descriptionQuality')
-        except:
-            pass
-        try:
-            matches = re.finditer(soil_pattern, xml_raw)
-            for match in matches:
-                layerupper = float(match.group('layerUpper'))
-                layerlower = float(match.group('layerLower'))
-                soilname = match.group('soilNameBRO')
-#                soilname = match.group('soilNameNEN5104')
-                anthropogenic = match.group('anthropogenic')
-                tertiary = match.group('tertiaryConstituent')
-                colour = match.group('colour')
-                inhomogeneity = match.group('inhomogeneity')
-                self.soillayers.append({"upper": layerupper, "lower": layerlower, "soilName": soilname, "anthropogenic": anthropogenic, "tertiary": tertiary, "colour": colour, "inhomogeneity": inhomogeneity})
-        except:
-            pass
-        try:
-            matches = re.finditer(sand_pattern, xml_raw)
-            for i, match in enumerate(matches):
-                organicmatter = match.group('organicMatter')
-                sandmedian = match.group('sandMedian')
-                self.sandlayers.append({"organicmatter": organicmatter, "sandmedian": sandmedian})
-        except:
-            pass
-        try:
-            matches = re.finditer(peat_pattern, xml_raw)
-            for i, match in enumerate(matches):
-                peatType = match.group('type')
-                self.peatlayers.append({"type": peatType})
-        except:
-            pass
-        try:
-            matches = re.finditer(clay_pattern, xml_raw)
-            for i, match in enumerate(matches):
-                organicmatter = match.group('organicMatter')
-                self.claylayers.append({"organicmatter": organicmatter})
-        except:
-            pass
-        
+            elif 'descriptionReportDate' in element.tag:
+                date = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter()}
+                self.date = datetime.strptime(date['date'], '%Y-%m-%d')
+            
+            elif 'descriptionQuality' in element.tag:
+                self.descriptionquality = element.text
+
+            elif 'layer' in element.tag:
+                self.soillayers.append({re.sub(r'{.*}', '', p.tag) : re.sub(r'\s*', '', p.text) for p in element.iter()})
+
         self.metadata = {"easting": self.easting, "northing": self.northing, "groundlevel": self.groundlevel, "testid": self.testid, "date": self.date, "finaldepth": self.finaldepth}
 
-        # voeg eigenschappen toe die afhankelijk zijn van het hoofdmateriaal
-        for layer in self.soillayers:
-            if layer["soilName"] is not None:
-                if layer["soilName"].lower().endswith("zand") and len(self.sandlayers) > 0:
-                    layer["sandproperties"] = self.sandlayers.pop(0)
-                elif layer["soilName"].lower().endswith("klei") and len(self.claylayers) > 0:
-                    layer["clayproperties"] = self.claylayers.pop(0)
-                elif layer["soilName"].lower().endswith("veen") and len(self.peatlayers) > 0:
-                    layer["peatproperties"] = self.peatlayers.pop(0)
-            else:
-                layer["soilName"] = "NBE"
-        
         # zet om in een dataframe om het makkelijker te verwerken
         self.soillayers = pd.DataFrame(self.soillayers)
-
+        
         # voeg verdeling componenten toe
         # van https://github.com/cemsbv/pygef/blob/master/pygef/broxml.py
         material_components = ["gravel_component", "sand_component", "clay_component", "loam_component", "peat_component", "silt_component"]
@@ -744,15 +623,22 @@ class Bore():
             "zwakZandigeKlei": [0.0, 0.1, 0.9, 0.0, 0.0, 0.0],
             "zwakZandigeKleiMetGrind": [0.05, 0.1, 0.85, 0.0, 0.0, 0.0],
         }
+
         # voor sorteren op bijdrage is het handiger om een dictionary te maken
         soil_names_dict_dicts = {}
         for key, value in soil_names_dict_lists.items():
             soil_names_dict_dicts[key] = dict(sorted({v: i for i, v in enumerate(value)}.items(), reverse=True))
-        self.soillayers["components"] = self.soillayers["soilName"].map(soil_names_dict_dicts)
 
+        # TODO: soilNameNEN5104 specialMaterial
+        self.soillayers["soilName"] = np.where(self.soillayers["geotechnicalSoilName"].isna(), "NBE", self.soillayers["geotechnicalSoilName"])
+        self.soillayers["components"] = self.soillayers["soilName"].map(soil_names_dict_dicts)
+        
         # voeg kolommen toe met absolute niveaus (t.o.v. NAP)
-        self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upper"] 
-        self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lower"] 
+        self.soillayers["upperBoundary"] = pd.to_numeric(self.soillayers["upperBoundary"])
+        self.soillayers["lowerBoundary"] = pd.to_numeric(self.soillayers["lowerBoundary"])
+
+        self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upperBoundary"] 
+        self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lowerBoundary"] 
 
     def load_gef(self, gefFile):
 
