@@ -10,6 +10,7 @@ __maintainer__ = "Thomas van der Linden"
 __email__ = "t.van.der.linden@amsterdam.nl"
 __status__ = "Dev"
 
+from cmath import isnan
 from dataclasses import dataclass
 import pandas as pd
 from io import StringIO
@@ -565,26 +566,26 @@ class Bore():
                 self.testid = element.text
 
             if 'deliveredLocation' in element.tag:
-                location = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter()}
+                location = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}
                 self.easting = float(location['pos'].split()[0])
                 self.northing = float(location['pos'].split()[1])
 
             elif 'deliveredVerticalPosition' in element.tag:
-                verticalPosition = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter()}
+                verticalPosition = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}
                 self.groundlevel = float(verticalPosition['offset'])
 
             elif 'finalDepthBoring' in element.tag:
                 self.finaldepth = float(element.text)
 
             elif 'descriptionReportDate' in element.tag:
-                date = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter()}
+                date = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}
                 self.date = datetime.strptime(date['date'], '%Y-%m-%d')
             
             elif 'descriptionQuality' in element.tag:
                 self.descriptionquality = element.text
 
             elif 'layer' in element.tag:
-                self.soillayers.append({re.sub(r'{.*}', '', p.tag) : re.sub(r'\s*', '', p.text) for p in element.iter()})
+                self.soillayers.append({re.sub(r'{.*}', '', p.tag) : re.sub(r'\s*', '', p.text) for p in element.iter() if p.text is not None})
 
         self.metadata = {"easting": self.easting, "northing": self.northing, "groundlevel": self.groundlevel, "testid": self.testid, "date": self.date, "finaldepth": self.finaldepth}
 
