@@ -527,7 +527,7 @@ class Bore():
 
         for element in root.iter():
 
-            if 'broId' in element.tag:
+            if 'broId' in element.tag: # TODO: er zijn ook boringen zonder broId, met requestReference dat toevoegen levert een vreemde waarde voor testid
                 self.testid = element.text
 
             if 'deliveredLocation' in element.tag:
@@ -597,7 +597,12 @@ class Bore():
 
         # TODO: soilNameNEN5104 specialMaterial
         self.soillayers["soilName"] = np.where(self.soillayers["geotechnicalSoilName"].isna(), "NBE", self.soillayers["geotechnicalSoilName"])
+        # voeg de componenten toe
         self.soillayers["components"] = self.soillayers["soilName"].map(soil_names_dict_dicts)
+        
+        # specialMaterial was voor het maken van de componenten op NBE gezet, nu weer terug naar de oorspronkelijke waarde
+        if "specialMaterial" in self.soillayers.columns:
+            self.soillayers["soilName"][self.soillayers["soilName"] == "NBE"] = self.soillayers["specialMaterial"]
         
         # voeg kolommen toe met absolute niveaus (t.o.v. NAP)
         self.soillayers["upperBoundary"] = pd.to_numeric(self.soillayers["upperBoundary"])
@@ -875,10 +880,15 @@ class Bore():
         for layer in self.soillayers.itertuples():
             y = (getattr(layer, "lower_NAP") + getattr(layer, "upper_NAP")) / 2
             propertiesText = ""
-            for materialproperties in ["clayproperties", "sandproperties", "peatproperties", "materialproperties"]:
+            # TODO: deze properties zijn veranderd, worden nu niet meer apart ingelezen
+            for materialproperty in ['tertiaryConstituent',
+                                        'colour', 'dispersedInhomogeneity', 'carbonateContentClass',
+                                        'organicMatterContentClass', 'mixed', 'sandMedianClass', 'grainshape',
+                                        'sizeFraction', 'angularity', 'sphericity', 'fineSoilConsistency',
+                                        'organicSoilTexture', 'organicSoilConsistency', 'peatTensileStrength']:
                 try:
-                    properties = getattr(layer, materialproperties)
-                    for value in properties.values():
+                    value = getattr(layer, materialproperty)
+                    if not value is np.nan():
                         propertiesText += f', {value}'
                 except:
                     pass

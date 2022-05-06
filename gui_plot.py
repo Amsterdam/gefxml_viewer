@@ -32,7 +32,7 @@ b_chooseDir.width = 100
 b_chooseDir.config(font=('Courier 14'))
 
 def chooseFiles():
-    main_win.sourceFiles = filedialog.askopenfilenames(parent=main_win, title='Please select a directory')
+    main_win.sourceFiles = filedialog.askopenfilenames(parent=main_win, title='Please select files')
 
 b_chooseFiles = tk.Button(main_win, text="Select File(s)", width=20, height=3, command=chooseFiles)
 b_chooseFiles.place(x=635, y=95)
