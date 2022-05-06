@@ -880,18 +880,17 @@ class Bore():
         for layer in self.soillayers.itertuples():
             y = (getattr(layer, "lower_NAP") + getattr(layer, "upper_NAP")) / 2
             propertiesText = ""
-            # TODO: deze properties zijn veranderd, worden nu niet meer apart ingelezen
-            for materialproperty in ['tertiaryConstituent',
-                                        'colour', 'dispersedInhomogeneity', 'carbonateContentClass',
+            for materialproperty in ['tertiaryConstituent', 'colour', 'dispersedInhomogeneity', 'carbonateContentClass',
                                         'organicMatterContentClass', 'mixed', 'sandMedianClass', 'grainshape',
                                         'sizeFraction', 'angularity', 'sphericity', 'fineSoilConsistency',
                                         'organicSoilTexture', 'organicSoilConsistency', 'peatTensileStrength']:
-                try:
+                # TODO: dit werkt nog niet goed
+                if materialproperty in self.soillayers.columns:
                     value = getattr(layer, materialproperty)
-                    if not value is np.nan():
+                    try:
+                        np.isnan(value)
+                    except:
                         propertiesText += f', {value}'
-                except:
-                    pass
             text = f'{getattr(layer, "soilName")}{propertiesText}'
             axes[1].text(0, y, text, wrap=True)
 
