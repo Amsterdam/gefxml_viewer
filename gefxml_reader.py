@@ -84,77 +84,42 @@ class Cpt():
 
     def load_xml(self, xmlFile):
 
+        # lees een CPT in vanuit een BRO XML
+        tree = ElementTree()
+        tree.parse(xmlFile)
+        root = tree.getroot()
+
+        for element in root.iter():
+
+            if 'broId' in element.tag:
+                self.testid = element.text
+
+            if 'deliveredLocation' in element.tag:
+                location = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}
+                self.easting = float(location['pos'].split()[0])
+                self.northing = float(location['pos'].split()[1])
+
+            elif 'deliveredVerticalPosition' in element.tag:
+                verticalPosition = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}
+                self.groundlevel = float(verticalPosition['offset'])
+
+            elif 'finalDepth' in element.tag:
+                self.finaldepth = float(element.text)
+
+            elif 'researchReportDate' in element.tag:
+                date = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}
+                self.date = datetime.strptime(date['date'], '%Y-%m-%d')
+
+            elif 'values' in element.tag:
+                self.data = element.text
+
+            elif 'removedLayer' in element.tag:
+                # TODO: maak hier van een Bore() en plot die ook
+                self.removedlayers = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}      
+
         filename_pattern = re.compile(r'(.*[\\/])*(?P<filename>.*)\.')
-        testid_pattern = re.compile(r'<.*:broId>\s*(?P<testid>.*)</.*:broId>')
-        objectid_pattern = re.compile(r'<.*:objectIdAccountableParty>\s*(?P<testid>.*)\s*</.*:objectIdAccountableParty>')
-        xy_id_pattern = re.compile(r'<.*:location\s*(.*\d*:id="BRO_\d*")?\s*srsName="urn:ogc:def:crs:EPSG::28992"\s*(.*\d*:id="BRO_\d*")?>\s*' +
-                                        r'<.*\d*:pos>(?P<X>\d*\.?\d*)\s*(?P<Y>\d*\.?\d*)</.*\d*:pos>')
-        z_id_pattern = re.compile(r'<.*:offset uom="(?P<z_unit>.*)">(?P<Z>-?\d*\.?\d*)</.*:offset>')
-        trajectory_pattern = re.compile(r'<.*:finalDepth uom="m">(?P<finalDepth>\d*\.?\d*)</.*:finalDepth>\s')
-        report_date_pattern = re.compile(r'<(.*:)?researchReportDate>\s*<.*:date>(?P<report_date>\d*-\d*-\d*)</.*:date>')
-        removed_layer_pattern = re.compile(r'<.*:removedLayer>\s*'+ 
-                                                r'<.*:sequenceNumber>(?P<layerNr>\d*)</.*:sequenceNumber>\s*' + 
-                                                r'<.*:upperBoundary uom="m">(?P<layerUpper>\d*\.?\d*)</.*:upperBoundary>\s*' + 
-                                                r'<.*:lowerBoundary uom="m">(?P<layerLower>\d*\.?\d*)</.*:lowerBoundary>\s*' + 
-                                                r'<.*:description>(?P<layerDescription>.*)</.*:description>\s*' + 
-                                            r'</.*:removedLayer>\s*')
-        data_pattern = re.compile(r'<.*:values>(?P<data>.*)</.*:values>')
-
-        with open(xmlFile) as f:
-            xml_raw = f.read()
-
-        try:
-            match = re.search(filename_pattern, xmlFile)
-            self.filename = match.group('filename')
-        except:
-            pass
-        try:
-            match = re.search(xy_id_pattern, xml_raw)
-            self.easting = float(match.group('X'))
-            self.northing = float(match.group('Y'))
-#            self.srid = match.group('coordsys') # TODO: dit moet worden toegevoegd.
-        except:
-            pass
-        try:
-            match = re.search(z_id_pattern, xml_raw)
-            self.groundlevel = float(match.group('Z'))
-        except:
-            pass
-        try:
-            match = re.search(testid_pattern, xml_raw)
-            self.testid = match.group('testid')
-        except:
-            pass
-        try:
-            match = re.search(objectid_pattern, xml_raw)
-            self.testid = match.group('testid')
-        except:
-            pass
-        try:
-            match = re.search(report_date_pattern, xml_raw)
-            self.date = match.group('report_date')
-        except:
-            pass
-        try:
-            match = re.search(trajectory_pattern, xml_raw)
-            self.finaldepth = float(match.group('finalDepth'))
-        except:
-            pass
-        try:
-            matches = re.finditer(removed_layer_pattern, xml_raw)
-            for match in matches:
-                layernr = match.group('layerNr')
-                layerupper = match.group('layerUpper')
-                layerlower = match.group('layerLower')
-                layerdescription = match.group('layerDescription')
-                self.removedlayers[layernr] = {"upper": layerupper, "lower": layerlower, "description": layerdescription}
-        except:
-            pass
-        try:
-            match = re.search(data_pattern, xml_raw)
-            self.data = match.group('data')
-        except:
-            pass
+        match = re.search(filename_pattern, xmlFile)
+        self.filename = match.group('filename')
 
         dataColumns = [
             "penetrationLength", "depth", "elapsedTime", 
