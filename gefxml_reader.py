@@ -481,9 +481,10 @@ class Cpt():
             self.data.dropna(axis=1, how='all', inplace=True)
             # bereken diepte als inclinatie bepaald is
             if "penetrationLength" in self.data.columns:
+                self.data.sort_values("penetrationLength", inplace=True)
                 if "inclinationResultant" in self.data.columns:
                     self.data["correctedPenetrationLength"] = self.data["penetrationLength"].diff().abs() * np.cos(np.deg2rad(self.data["inclinationResultant"]))
-                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()
+                    self.data["depth"] = self.data["correctedPenetrationLength"].cumsum()                   
                 elif "inclinationEW" in self.data.columns and "inclinationNS" in self.data.columns:
                     z = self.data["penetrationLength"].diff().abs()
                     x = z * np.tan(np.deg2rad(self.data["inclinationEW"]))
