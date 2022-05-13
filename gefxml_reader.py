@@ -108,10 +108,16 @@ class Cpt():
 
             elif 'researchReportDate' in element.tag:
                 date = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}
-                self.date = datetime.strptime(date['date'], '%Y-%m-%d')
+                try: # een datum is niet verplicht
+                    self.date = datetime.strptime(date['date'], '%Y-%m-%d')
+                except:
+                    pass
 
-            elif 'values' in element.tag:
-                self.data = element.text
+            # er kan een dissipatietest inzitten, hiermee wordt alleen de cpt ingelezen. Die staat in dissipationTest
+            elif 'conePenetrationTest' in element.tag: 
+                for child in element.iter():
+                    if 'values' in child.tag:
+                        self.data = child.text
 
             elif 'removedLayer' in element.tag:
                 # TODO: maak hier van een Bore() en plot die ook
@@ -503,8 +509,112 @@ class Cpt():
                 else:
                     self.data["depth"] = self.data["penetrationLength"].abs()
 
+    def interpret(self):
+        is_above = lambda p,a,b: np.cross(p-a, b-a) < 0
+        
+        # TODO: opruimen
+        # DFoundations 3 type rule
+        soils3Type = {
+            'zand': [[0., 0.5], [10, 5000]],
+            'klei': [[0., 0.01], [10, 100]],
+            'veen': [[0., 0.], [10, 0.2]]
+        }
+        conditions3Type = [
+            np.cross(self.data[['coneResistance', 'frictionRatio']] - np.full((len(self.data), 2), value[0]), np.full((len(self.data), 2), value[1]) - np.full((len(self.data), 2), value[0])) < 0 for value in soils3Type.values()
+            ]
+        choices3Type = [key for key in soils3Type.keys()]
+        self.data['threeType'] = np.select(conditions3Type, choices3Type, np.nan)
+
+        # DFoundations qc only rule
+        conditionsQcOnly = [
+            self.data['coneResistance'] > 4,
+            self.data['coneResistance'] > 1,
+            self.data['coneResistance'] >0.1
+        ]
+        choicesQcOnly = ['zand', 'klei', 'veen']
+        self.data['qcOnly'] = np.select(conditionsQcOnly, choicesQcOnly, np.nan)
+
+        # DFoundations NEN rule
+        soilsNEN = {
+            'grind': [[0, 24.92], [10, 249200]],
+            'zand':  [[0, 13.11], [10, 131100]],
+            'zwakSiltigZand':  [[0, 8.594], [10, 85940]],
+            'sterkSiltigZand':  [[0, 4.606], [10, 46060]],
+            'sterkZandigSilt':  [[0, 2.498], [10, 24980]],
+            'zwakZandigSilt':  [[0, 1.124], [10, 11240]],
+            'sterkZandigeKlei':  [[0, 0.516], [10, 5165]],
+            'zwakZandigeKlei':  [[0, 0.292], [10, 2921]],
+            'klei':  [[0, 0.068], [10, 676.1]],
+            #'humeuzeKlei':  [[0, 0.02], [10, 201]], # matige consistentie, past niet in schema
+            'humeuzeKlei':  [[0, 0.004], [10, 39.59]],
+            #'veen':  [[0, 0], [10, .58]], # matige consistentie, past niet in schema
+            'veen':  [[0, 0], [10, 0.08]]
+        }
+        conditionsNEN = [
+            np.cross(self.data[['coneResistance', 'frictionRatio']] - np.full((len(self.data), 2), value[0]), np.full((len(self.data), 2), value[1]) - np.full((len(self.data), 2), value[0])) < 0 for value in soilsNEN.values()
+            ]
+        choicesNEN = [key for key in soilsNEN.keys()]
+        self.data['NEN'] = np.select(conditionsNEN, choicesNEN, np.nan)
+
+        # maak een plot alsof het een boring is
+        cptAsBore = Bore()
+        cptAsBore.soillayers['upper_NAP'] = self.groundlevel - self.data['depth']
+        cptAsBore.soillayers['lower_NAP'] = cptAsBore.soillayers['upper_NAP'].shift(-1)
+        cptAsBore.soillayers['geotechnicalSoilName'] = self.data['NEN']
+        cptAsBore.groundlevel = self.groundlevel
+        cptAsBore.finaldepth = self.data['depth'].max()
+        cptAsBore.descriptionquality = 'cpt'
+        
+        # TODO het volgende blok moet een aparte functie worden of zoiets, het wordt vaker gebruikt.
+        soil_names_dict_lists = {
+            "betonOngebroken": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # specialMaterial
+            "humeuzeKlei": [0.0, 0.0, 0.9, 0.0, 0.1, 0.0],
+            "keitjes": [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "klei": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+            "kleiigVeen": [0.0, 0.0, 0.3, 0.0, 0.7, 0.0],
+            "kleiigZand": [0.0, 0.7, 0.3, 0.0, 0.0, 0.0],
+            "kleiigZandMetGrind": [0.05, 0.65, 0.3, 0.0, 0.0, 0.0],
+            "NBE": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], # specialMaterial
+            "puin": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # specialMaterial
+            "siltigZand": [0.0, 0.7, 0.0, 0.0, 0.0, 0.3],
+            "siltigZandMetGrind": [0.05, 0.65, 0.0, 0.0, 0.0, 0.3],
+            "sterkGrindigZand": [0.3, 0.7, 0.0, 0.0, 0.0, 0.0],
+            "sterkGrindigeKlei": [0.3, 0.0, 0.7, 0.0, 0.0, 0.0],
+            "sterkSiltigZand": [0.0, 0.7, 0.0, 0.0, 0.0, 0.3],
+            "sterkZandigGrind": [0.7, 0.3, 0.0, 0.0, 0.0, 0.0],
+            "sterkZandigSilt": [0.0, 0.3, 0.0, 0.0, 0.0, 0.7],
+            "sterkZandigeKlei": [0.0, 0.3, 0.7, 0.0, 0.0, 0.0],
+            "sterkZandigeKleiMetGrind": [0.05, 0.3, 0.65, 0.0, 0.0, 0.0],
+            "sterkZandigVeen": [0.0, 0.3, 0.0, 0.0, 0.7, 0.0],
+            "veen": [0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            "zand": [0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            "zwakGrindigZand": [0.1, 0.9, 0.0, 0.0, 0.0, 0.0],
+            "zwakGrindigeKlei": [0.1, 0.0, 0.9, 0.0, 0.0, 0.0],
+            "zwakSiltigZand": [0.0, 0.9, 0.0, 0.0, 0.0, 0.1],
+            "zwakSiltigeKlei": [0.0, 0.0, 0.9, 0.0, 0.0, 0.1],
+            "zwakZandigGrind": [0.9, 0.1, 0.0, 0.0, 0.0, 0.0],
+            "zwakZandigVeen": [0.0, 0.1, 0.0, 0.0, 0.9, 0.0],
+            "zwakZandigeKlei": [0.0, 0.1, 0.9, 0.0, 0.0, 0.0],
+            "zwakZandigeKleiMetGrind": [0.05, 0.1, 0.85, 0.0, 0.0, 0.0],
+        }
+
+        # voor sorteren op bijdrage is het handiger om een dictionary te maken
+        soil_names_dict_dicts = {}
+        for key, value in soil_names_dict_lists.items():
+            soil_names_dict_dicts[key] = dict(sorted({v: i for i, v in enumerate(value)}.items(), reverse=True))
+
+        # TODO: soilNameNEN5104 specialMaterial
+        cptAsBore.soillayers["soilName"] = np.where(cptAsBore.soillayers["geotechnicalSoilName"].isna(), "NBE", cptAsBore.soillayers["geotechnicalSoilName"])
+        # voeg de componenten toe
+        cptAsBore.soillayers["components"] = cptAsBore.soillayers["soilName"].map(soil_names_dict_dicts)
+        cptAsBore.soillayers.dropna(inplace=True)
+
+
+        cptAsBore.plot(path='./output/cptasbore')
+
 @dataclass
 class Bore():
+    #TODO: uitbreiden voor BHR-P en BHR-G, deels werkt het al
     def __init__(self):
         self.projectid = None
         self.projectname = None
@@ -517,9 +627,10 @@ class Bore():
         self.testid = None
         self.date = None
         self.finaldepth = None
-        self.soillayers = []
+        self.soillayers = pd.DataFrame()
         self.metadata = {}
-    
+        self.descriptionquality = None
+
     def load_xml(self, xmlFile):
         # lees een boring in vanuit een BRO XML
         tree = ElementTree()
@@ -528,7 +639,7 @@ class Bore():
 
         for element in root.iter():
 
-            if 'broId' in element.tag: # TODO: er zijn ook boringen zonder broId, met requestReference dat toevoegen levert een vreemde waarde voor testid
+            if 'broId' in element.tag or 'requestReference' in element.tag: # TODO: er zijn ook boringen zonder broId, met requestReference dat toevoegen levert een vreemde waarde voor testid
                 self.testid = element.text
 
             if 'deliveredLocation' in element.tag:
@@ -563,6 +674,7 @@ class Bore():
         material_components = ["gravel_component", "sand_component", "clay_component", "loam_component", "peat_component", "silt_component"]
         soil_names_dict_lists = {
             "betonOngebroken": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # specialMaterial
+            "humeuzeKlei": [0.0, 0.0, 0.9, 0.0, 0.1, 0.0],
             "keitjes": [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             "klei": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
             "kleiigVeen": [0.0, 0.0, 0.3, 0.0, 0.7, 0.0],
@@ -574,6 +686,7 @@ class Bore():
             "siltigZandMetGrind": [0.05, 0.65, 0.0, 0.0, 0.0, 0.3],
             "sterkGrindigZand": [0.3, 0.7, 0.0, 0.0, 0.0, 0.0],
             "sterkGrindigeKlei": [0.3, 0.0, 0.7, 0.0, 0.0, 0.0],
+            "sterkSiltigZand": [0.0, 0.7, 0.0, 0.0, 0.0, 0.3],
             "sterkZandigGrind": [0.7, 0.3, 0.0, 0.0, 0.0, 0.0],
             "sterkZandigSilt": [0.0, 0.3, 0.0, 0.0, 0.0, 0.7],
             "sterkZandigeKlei": [0.0, 0.3, 0.7, 0.0, 0.0, 0.0],
