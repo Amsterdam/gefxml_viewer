@@ -630,7 +630,8 @@ class Bore():
         self.testid = None
         self.date = None
         self.finaldepth = None
-        self.soillayers = []
+        self.soillayers = {}
+        self.analyses = []
         self.metadata = {}
         self.descriptionquality = None
 
@@ -661,29 +662,43 @@ class Bore():
                 date = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}
                 self.date = datetime.strptime(date['date'], '%Y-%m-%d')
             
-            elif 'descriptionQuality' in element.tag:
-                self.descriptionquality = element.text
 
-            elif 'layer' in element.tag:
-                self.soillayers.append({re.sub(r'{.*}', '', p.tag) : re.sub(r'\s*', '', p.text) for p in element.iter() if p.text is not None})
+            elif 'descriptiveBoreholeLog' in element.tag:
+                for child in element.iter():
+                    if 'descriptionQuality' in child.tag:
+                        descriptionquality = child.text
+                    elif 'descriptionLocation' in child.tag:
+                        descriptionLocation = child.text
+                        soillayers = []
+                    elif 'layer' in child.tag:
+                        # TODO: onderscheid maken tussen veld en labbeschrijving
+                        soillayers.append({re.sub(r'{.*}', '', p.tag) : re.sub(r'\s*', '', p.text) for p in child.iter() if p.text is not None})
+                # zet soillayers om in dataframe om het makkelijker te verwerken
+                self.soillayers[descriptionLocation] = pd.DataFrame(soillayers) 
+
+            elif 'boreholeSampleAnalysis' in element.tag:
+                for child in element.iter():
+                    if 'investigatedInterval' in child.tag:
+                        self.analyses.append({re.sub(r'{.*}', '', p.tag) : re.sub(r'\s*', '', p.text) for p in child.iter() if p.text is not None})
+
 
         self.metadata = {"easting": self.easting, "northing": self.northing, "groundlevel": self.groundlevel, "testid": self.testid, "date": self.date, "finaldepth": self.finaldepth}
 
-        # zet om in een dataframe om het makkelijker te verwerken
-        self.soillayers = pd.DataFrame(self.soillayers)
-        
-        self.soillayers = self.add_components()
+        for descriptionLocation, soillayers in self.soillayers.items():
+            # TODO: mogelijk verwarrend om soillayers en self.soillayers te combineren
+            # voeg de componenten toe t.b.v. plot       
+            self.soillayers[descriptionLocation] = self.add_components(soillayers)
 
-        # specialMaterial was voor het maken van de componenten op NBE gezet, nu weer terug naar de oorspronkelijke waarde
-        if "specialMaterial" in self.soillayers.columns:
-            self.soillayers["soilName"][self.soillayers["soilName"] == "NBE"] = self.soillayers["specialMaterial"]
-        
-        # voeg kolommen toe met absolute niveaus (t.o.v. NAP)
-        self.soillayers["upperBoundary"] = pd.to_numeric(self.soillayers["upperBoundary"])
-        self.soillayers["lowerBoundary"] = pd.to_numeric(self.soillayers["lowerBoundary"])
+            # specialMaterial was voor het maken van de componenten op NBE gezet, nu weer terug naar de oorspronkelijke waarde
+            if "specialMaterial" in soillayers.columns:
+                self.soillayers[descriptionLocation][self.soillayers[descriptionLocation]["soilName"] == "NBE"]["soilName"] = soillayers["specialMaterial"]
+            
+            # voeg kolommen toe met absolute niveaus (t.o.v. NAP)
+            self.soillayers[descriptionLocation]["upperBoundary"] = pd.to_numeric(soillayers["upperBoundary"])
+            self.soillayers[descriptionLocation]["lowerBoundary"] = pd.to_numeric(soillayers["lowerBoundary"])
 
-        self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upperBoundary"] 
-        self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lowerBoundary"] 
+            self.soillayers[descriptionLocation]["upper_NAP"] = self.groundlevel - soillayers["upperBoundary"] 
+            self.soillayers[descriptionLocation]["lower_NAP"] = self.groundlevel - soillayers["lowerBoundary"] 
 
     def load_gef(self, gefFile):
 
@@ -924,34 +939,41 @@ class Bore():
 
 
     def plot(self, path='./output'):
-        # maak een eenvoudige plot van een boring
-        uppers = list(self.soillayers["upper_NAP"])
-        lowers = list(self.soillayers["lower_NAP"])
 
+        materials = {0: 'grind', 1: 'zand', 2: 'klei', 3: 'leem', 4: 'veen', 5: 'silt', 6: 'overig'}
+        colorsDict = {0: "orange", 1: "yellow", 2: "steelblue", 3: "purple", 4: "brown", 5: "lime", 6: "black"}
+        hatchesDict = {0: "ooo", 1: "...", 2: "///", 3:"", 4: "---", 5: "\\\\\\", 6: ""}
+
+        nrOfLogs = len(self.soillayers.keys())
         # maak een diagram met primaire en secundaire componenten
         fig = plt.figure(figsize=(6, self.finaldepth + 2)) 
-        gs = GridSpec(2, 2, height_ratios=[self.finaldepth, 2], width_ratios=[2, 1] , figure=fig)
-        
+        gs = GridSpec(nrows=2, ncols=2 * nrOfLogs, height_ratios=[self.finaldepth, 2], width_ratios=np.tile([2, 1], nrOfLogs), figure=fig)
         axes = []
-        axes.append(fig.add_subplot(gs[0, 0]))
-        axes.append(fig.add_subplot(gs[0, 1], sharey=axes[0]))
-        axes.append(fig.add_subplot(gs[1,:]))
 
-        components = list(self.soillayers["components"])
-        colorsDict = {0: "orange", 1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple", 6: "black"}
-        hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "\\\\\\", 3:"", 6: ""}
-        for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
-            left = 0
-            for comp, nr in component.items():
-                barPlot = axes[0].barh(lower, width=comp, left=left, height=upper-lower, color=colorsDict[nr], hatch=hatchesDict[nr], edgecolor="black", align="edge")
-                left += comp
+        for i, [descriptionLocation, soillayers] in enumerate(self.soillayers.items()):
+            axes.append(fig.add_subplot(gs[0, i * 2])) # boorstaat 
+            axes.append(fig.add_subplot(gs[0, i * 2 + 1], sharey=axes[0])) # toelichting 
+        
+            # maak een eenvoudige plot van een boring
+            uppers = list(soillayers["upper_NAP"])
+            lowers = list(soillayers["lower_NAP"])
+            components = list(soillayers["components"])
 
-        axes[0].set_ylim([self.groundlevel - self.finaldepth, self.groundlevel])
-        axes[0].set_xticks([])
-        axes[0].set_ylabel('diepte [m t.o.v. NAP]')
+            for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
+                left = 0
+                try: # TODO: kan dit beter. Gemaakt vanwege een geval met component = nan (lab boring van Anthony Moddermanstraat)
+                    for comp, nr in component.items():
+                        barPlot = axes[i * 2].barh(lower, width=comp, left=left, height=upper-lower, color=colorsDict[nr], hatch=hatchesDict[nr], edgecolor="black", align="edge")
+                        left += comp
+                except:
+                    pass
+
+            axes[i * 2].set_ylim([self.groundlevel - self.finaldepth, self.groundlevel])
+            axes[i * 2].set_xticks([])
+            axes[i * 2].set_ylabel('diepte [m t.o.v. NAP]')
 
         # voeg de beschrijving toe
-        for layer in self.soillayers.itertuples():
+        for layer in soillayers.itertuples():
             y = (getattr(layer, "lower_NAP") + getattr(layer, "upper_NAP")) / 2
             propertiesText = ""
             for materialproperty in ['tertiaryConstituent', 'colour', 'dispersedInhomogeneity', 'carbonateContentClass',
@@ -959,7 +981,7 @@ class Bore():
                                         'sizeFraction', 'angularity', 'sphericity', 'fineSoilConsistency',
                                         'organicSoilTexture', 'organicSoilConsistency', 'peatTensileStrength']:
                 # TODO: dit werkt nog niet goed
-                if materialproperty in self.soillayers.columns:
+                if materialproperty in soillayers.columns:
                     value = getattr(layer, materialproperty)
                     try:
                         np.isnan(value)
@@ -968,10 +990,12 @@ class Bore():
             text = f'{getattr(layer, "soilName")}{propertiesText}'
             axes[1].text(0, y, text, wrap=True)
 
+        # voeg een stempel toe
+        axes.append(fig.add_subplot(gs[1,:])) # stempel
 
         # verberg de assen van de onderste plot en rechtse plot zodat deze gebruikt kunnen worden voor tekst
-        axes[1].set_axis_off()
-        axes[2].set_axis_off()
+        axes[1].set_axis_off() # toelichting op veldbeschrijving
+        axes[-1].set_axis_off() # stempel
         plt.text(0.05, 0.6, f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\nkwaliteit: {self.descriptionquality}\ndatum: {self.date}', fontsize=14, fontweight='bold')
         plt.text(0.05, 0.2, 'Ingenieursbureau Gemeente Amsterdam Vakgroep Geotechniek Python ', fontsize=10)
         plt.tight_layout()
@@ -1011,7 +1035,7 @@ class Bore():
         
         self.soillayers.dropna(inplace=True)
 
-    def add_components(self):
+    def add_components(self, soillayers):
         # voeg verdeling componenten toe
         # van https://github.com/cemsbv/pygef/blob/master/pygef/broxml.py
         material_components = ["gravel_component", "sand_component", "clay_component", "loam_component", "peat_component", "silt_component"]
@@ -1055,7 +1079,7 @@ class Bore():
             soil_names_dict_dicts[key] = dict(sorted({v: i for i, v in enumerate(value)}.items(), reverse=True))
 
         # TODO: soilNameNEN5104 specialMaterial
-        self.soillayers["soilName"] = np.where(self.soillayers["geotechnicalSoilName"].isna(), "NBE", self.soillayers["geotechnicalSoilName"])
+        soillayers["soilName"] = np.where(soillayers["geotechnicalSoilName"].isna(), "NBE", soillayers["geotechnicalSoilName"])
         # voeg de componenten toe
-        self.soillayers["components"] = self.soillayers["soilName"].map(soil_names_dict_dicts)
-        return self.soillayers
+        soillayers["components"] = soillayers["soilName"].map(soil_names_dict_dicts)
+        return soillayers
