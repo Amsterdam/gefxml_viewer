@@ -941,8 +941,8 @@ class Bore():
     def plot(self, path='./output'):
 
         materials = {0: 'grind', 1: 'zand', 2: 'klei', 3: 'leem', 4: 'veen', 5: 'silt', 6: 'overig'}
-        colorsDict = {0: "orange", 1: "yellow", 2: "steelblue", 3: "purple", 4: "brown", 5: "lime", 6: "black"}
-        hatchesDict = {0: "ooo", 1: "...", 2: "///", 3:"", 4: "---", 5: "\\\\\\", 6: ""}
+        colorsDict = {0: "orange", 1: "yellow", 2: "green", 3: "yellowgreen", 4: "brown", 5: "grey", 6: "black"} # BRO style
+        hatchesDict = {0: "ooo", 1: "...", 2: "///", 3:"", 4: "---", 5: "|||", 6: ""} # BRO style
 
         nrOfLogs = len(self.soillayers.keys())
         # maak een diagram met primaire en secundaire componenten
@@ -1038,7 +1038,7 @@ class Bore():
     def add_components(self, soillayers):
         # voeg verdeling componenten toe
         # van https://github.com/cemsbv/pygef/blob/master/pygef/broxml.py
-        material_components = ["gravel_component", "sand_component", "clay_component", "loam_component", "peat_component", "silt_component"]
+        material_components = ["gravel_component", "sand_component", "clay_component", "loam_component", "peat_component", "silt_component", "special_material"]
         soil_names_dict_lists = {
             "betonOngebroken": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # specialMaterial
             "grind":  [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -1050,6 +1050,7 @@ class Bore():
             "kleiigZandMetGrind": [0.05, 0.65, 0.3, 0.0, 0.0, 0.0],
             "NBE": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], # specialMaterial
             "puin": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # specialMaterial
+            "silt" : [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
             "siltigZand": [0.0, 0.7, 0.0, 0.0, 0.0, 0.3],
             "siltigZandMetGrind": [0.05, 0.65, 0.0, 0.0, 0.0, 0.3],
             "sterkGrindigZand": [0.3, 0.7, 0.0, 0.0, 0.0, 0.0],
