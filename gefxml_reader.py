@@ -511,6 +511,110 @@ class Cpt():
                 else:
                     self.data["depth"] = self.data["penetrationLength"].abs()
 
+    def interpret(self):
+        # functie die later gebruikt wordt
+        is_below = lambda p,a,b: np.cross(p-a, b-a) > 0
+        
+        # de threeType en NEN regels gelden voor log(qc)
+        self.data['logConeResistance'] = np.log(self.data['coneResistance'])
+
+        self.data = self.interpret_qc_only()
+        self.data = self.interpret_three_type(is_below)
+        self.data = self.interpret_nen(is_below)
+        self.data = self.interpret_robertson()
+        self.data = self.interpret_custom()
+
+    def interpret_custom(self):
+        conditions = [
+            self.data['frictionRatio'].le(1.2),
+            self.data['frictionRatio'].ge(4.8),
+        ]
+        choices = [
+            'zand',
+            'veen'
+        ]
+        self.data['customInterpretation'] = np.select(conditions, choices, 'klei')
+        return self.data
+
+    def interpret_qc_only(self):
+        # DFoundations qc only rule
+        conditionsQcOnly = [
+            self.data['coneResistance'] > 4,
+            self.data['coneResistance'] > 1,
+            self.data['coneResistance'] > 0.1
+        ]
+        choicesQcOnly = ['zand', 'klei', 'veen']
+        self.data['qcOnly'] = np.select(conditionsQcOnly, choicesQcOnly, None)
+        return self.data
+
+    def interpret_three_type(self, is_below):
+        # DFoundations 3 type rule [frictionRatio, coneResistance] waarden voor lijn die bovengrens vormt
+        # TODO: resultaat komt niet overeen met DFoundations
+        soils3Type = OrderedDict([
+            ['veen', [np.full((len(self.data), 2), [0., np.log10(0.00002)]), np.full((len(self.data), 2), [10, np.log10(0.2)])]],
+            ['klei', [np.full((len(self.data), 2), [0., np.log10(0.01)]), np.full((len(self.data), 2), [10, np.log10(100)])]],
+            ['zand', [np.full((len(self.data), 2), [0., np.log10(0.5)]), np.full((len(self.data), 2), [10, np.log10(5000)])]]
+            ])
+        # conditions: check of punt onder de bovengrens ligt
+        conditions3Type = [
+            is_below(self.data[['frictionRatio', 'logConeResistance']], value[0], value[1]) for value in soils3Type.values()
+            ]
+        choices3Type = soils3Type.keys()
+        # toewijzen materialen op basis van de conditions
+        self.data['threeType'] = np.select(conditions3Type, choices3Type, None)
+        return self.data
+    
+    def interpret_nen(self, is_below):
+        # DFoundations NEN rule [frictionRatio, coneResistance]
+        # TODO: resultaat komt niet overeen met DFoundations
+        soilsNEN = OrderedDict([
+            #['veen', [[0, np.log10(0)], [10, np.log10(0.08)]]], # slappe consistentie, past niet in schema
+            ['veen', [[0, np.log10(0.000058)], [10, np.log10(.58)]]], # coneResistance van het eerste punt aangepast 
+            #['humeuzeKlei', [[0, np.log10(0.004)], [10, np.log10(39.59)]]], # slappe consistentie, past niet in schema
+            ['humeuzeKlei', [[0, np.log10(0.02)], [10, np.log10(201)]]], 
+            ['klei', [[0, np.log10(0.068)], [10, np.log10(676.1)]]],
+            ['zwakZandigeKlei', [[0, np.log10(0.292)], [10, np.log10(2921)]]],
+            ['sterkZandigeKlei', [[0, np.log10(0.516)], [10, np.log10(5165)]]],
+            ['zwakZandigSilt', [[0, np.log10(1.124)], [10, np.log10(11240)]]],
+            ['sterkZandigSilt', [[0, np.log10(2.498)], [10, np.log10(24980)]]],
+            ['sterkSiltigZand', [[0, np.log10(4.606)], [10, np.log10(46060)]]],
+            ['zwakSiltigZand', [[0, np.log10(8.594)], [10, np.log10(85940)]]],
+            ['zand', [[0, np.log10(13.11)], [10, np.log10(131100)]]],
+            ['grind', [[0, np.log10(24.92)], [10, np.log10(249200)]]]
+            ])
+        
+        conditionsNEN = [
+            is_below(self.data[['frictionRatio', 'logConeResistance']], np.full((len(self.data), 2),value[0]), np.full((len(self.data), 2),value[1])) for value in soilsNEN.values()
+            ]
+        choicesNEN = soilsNEN.keys()
+        self.data['NEN'] = np.select(conditionsNEN, choicesNEN, None)
+        return self.data
+
+    def interpret_robertson(self):
+        # formula from: Soil Behaviour Type from the CPT: an update 
+        # http://www.cpt-robertson.com/PublicationsPDF/2-56%20RobSBT.pdf
+
+        # non-normalized soil behaviour types omgezet naar Nederlandse namen
+        sbtDict = {
+            'veen': 3.6,
+            'klei': 2.95,
+            'zwakKleiigSilt': 2.6,
+            'zwakSiltigZand': 2.05,
+            'sterkSiltigZand': 1.31,
+            'zand': 0,
+        }
+        
+        # formule voor non-normalized soil behaviour type
+        sbt = lambda qc, rf, isbt: ((3.47 - np.log10(qc * 1000 / 100)) ** 2 + (np.log10(rf + 1.22)) ** 2) ** 0.5 - isbt > 0
+        
+        conditions = [
+            sbt(self.data['coneResistance'], self.data['frictionRatio'], value) for value in sbtDict.values()
+        ]
+        choices = sbtDict.keys()
+        self.data[ 'Robertson'] = np.select(conditions, choices, None)
+
+        return self.data
+
 @dataclass
 class Bore():
     #TODO: uitbreiden voor BHR-P en BHR-G, deels werkt het al
@@ -526,7 +630,7 @@ class Bore():
         self.testid = None
         self.date = None
         self.finaldepth = None
-        self.soillayers = pd.DataFrame()
+        self.soillayers = []
         self.metadata = {}
         self.descriptionquality = None
 
@@ -568,7 +672,7 @@ class Bore():
         # zet om in een dataframe om het makkelijker te verwerken
         self.soillayers = pd.DataFrame(self.soillayers)
         
-        self.soillayers = self.add_components(self)
+        self.soillayers = self.add_components()
 
         # specialMaterial was voor het maken van de componenten op NBE gezet, nu weer terug naar de oorspronkelijke waarde
         if "specialMaterial" in self.soillayers.columns:
@@ -874,74 +978,11 @@ class Bore():
         plt.savefig(fname=f'{path}/{self.testid}.png')
         plt.close('all')
 
-    def interpret_qc_only(self, cpt):
-        # DFoundations qc only rule
-        conditionsQcOnly = [
-            cpt.data['coneResistance'] > 4,
-            cpt.data['coneResistance'] > 1,
-            cpt.data['coneResistance'] > 0.1
-        ]
-        choicesQcOnly = ['zand', 'klei', 'veen']
-        cpt.data['qcOnly'] = np.select(conditionsQcOnly, choicesQcOnly, np.nan)
-        return cpt.data
 
-    def interpret_three_type(self, cpt, is_below):
-        # DFoundations 3 type rule [frictionRatio, coneResistance] waarden voor lijn die bovengrens vormt
-        soils3Type = OrderedDict([
-            ['veen', [np.full((len(cpt.data), 2), [0., np.log10(0.00002)]), np.full((len(cpt.data), 2), [10, np.log10(0.2)])]],
-            ['klei', [np.full((len(cpt.data), 2), [0., np.log10(0.01)]), np.full((len(cpt.data), 2), [10, np.log10(100)])]],
-            ['zand', [np.full((len(cpt.data), 2), [0., np.log10(0.5)]), np.full((len(cpt.data), 2), [10, np.log10(5000)])]]
-            ])
-        # conditions: check of punt onder de bovengrens ligt
-        conditions3Type = [
-            is_below(cpt.data[['frictionRatio', 'logConeResistance']], value[0], value[1]) for value in soils3Type.values()
-            ]
-        choices3Type = soils3Type.keys()
-        # toewijzen materialen op basis van de conditions
-        cpt.data['threeType'] = np.select(conditions3Type, choices3Type, None)
-        return cpt.data
-    
-    def interpret_nen(self, cpt, is_below):
-        # DFoundations NEN rule [frictionRatio, coneResistance]
-        soilsNEN = OrderedDict([
-            #['veen', [[0, np.log10(0)], [10, np.log10(0.08)]]], # slappe consistentie, past niet in schema
-            ['veen', [[0, np.log10(0.000058)], [10, np.log10(.58)]]], # coneResistance van het eerste punt aangepast 
-            #['humeuzeKlei', [[0, np.log10(0.004)], [10, np.log10(39.59)]]], # slappe consistentie, past niet in schema
-            ['humeuzeKlei', [[0, np.log10(0.02)], [10, np.log10(201)]]], 
-            ['klei', [[0, np.log10(0.068)], [10, np.log10(676.1)]]],
-            ['zwakZandigeKlei', [[0, np.log10(0.292)], [10, np.log10(2921)]]],
-            ['sterkZandigeKlei', [[0, np.log10(0.516)], [10, np.log10(5165)]]],
-            ['zwakZandigSilt', [[0, np.log10(1.124)], [10, np.log10(11240)]]],
-            ['sterkZandigSilt', [[0, np.log10(2.498)], [10, np.log10(24980)]]],
-            ['sterkSiltigZand', [[0, np.log10(4.606)], [10, np.log10(46060)]]],
-            ['zwakSiltigZand', [[0, np.log10(8.594)], [10, np.log10(85940)]]],
-            ['zand', [[0, np.log10(13.11)], [10, np.log10(131100)]]],
-            ['grind', [[0, np.log10(24.92)], [10, np.log10(249200)]]]
-            ])
-        
-        conditionsNEN = [
-            is_below(cpt.data[['frictionRatio', 'logConeResistance']], np.full((len(cpt.data), 2),value[0]), np.full((len(cpt.data), 2),value[1])) for value in soilsNEN.values()
-            ]
-        choicesNEN = soilsNEN.keys()
-        cpt.data['NEN'] = np.select(conditionsNEN, choicesNEN, None)
-        return cpt.data
-
-    def from_cpt(self, cpt):
-        #TODO: functies voor de  interpretaties passen wellicht beter bij de Cpt class
-
-        # functie die later gebruikt wordt
-        is_below = lambda p,a,b: np.cross(p-a, b-a) > 0
-        
-        # de threeType en NEN regels gelden voor log(qc)
-        cpt.data['logConeResistance'] = np.log(cpt.data['coneResistance'])
-
-        cpt.data = self.interpret_qc_only(cpt)
-        cpt.data = self.interpret_three_type(cpt, is_below)
-        cpt.data = self.interpret_nen(cpt, is_below)
-
+    def from_cpt(self, cpt, interpretationModel='customInterpretation'):
 
         # maak een object alsof het een boring is
-        self.soillayers['geotechnicalSoilName'] = cpt.data['threeType']
+        self.soillayers['geotechnicalSoilName'] = cpt.data[interpretationModel]
         # TODO frictionRatio en coneResistance horen er eigenlijk niet in thuis, maar zijn handig als referentie
         self.soillayers[['frictionRatio', 'coneResistance']] = cpt.data[['frictionRatio', 'coneResistance']]
         self.groundlevel = cpt.groundlevel
