@@ -772,7 +772,7 @@ class Bore():
             pass
         try:
             match = re.search(data_pattern, gef_raw)
-            self.soillayers = match.group('data')
+            self.soillayers['veld'] = match.group('data') # TODO: lab toevoegen
         except:
             pass
 
@@ -839,11 +839,11 @@ class Bore():
             pass
         
         # zet de data om in een dataframe, dan kunnen we er wat mee    
-        self.soillayers = pd.read_csv(StringIO(self.soillayers), sep=self.columnseparator, skipinitialspace=True, header=None)
+        self.soillayers['veld'] = pd.read_csv(StringIO(self.soillayers['veld']), sep=self.columnseparator, skipinitialspace=True, header=None)
         
         # vervang de dummy waarden door nan
         for columnnr, voidvalue in self.columnvoid_values.items():
-            self.soillayers[columnnr] = self.soillayers[columnnr].replace(voidvalue, np.nan)
+            self.soillayers['veld'][columnnr] = self.soillayers['veld'][columnnr].replace(voidvalue, np.nan)
 
         # TODO: deze namen kloppen wellicht niet helemaal
         self.columninfo[max(self.columninfo.keys()) + 1] = 'soilName'
@@ -851,22 +851,22 @@ class Bore():
         self.columninfo[max(self.columninfo.keys()) + 1] = 'materialproperties'
 
         # geef de kolommen andere namen
-        self.soillayers = self.soillayers.rename(columns=self.columninfo)
+        self.soillayers['veld'] = self.soillayers['veld'].rename(columns=self.columninfo)
 
-        self.soillayers = self.soillayers.replace("'", "", regex=True)
+        self.soillayers['veld'] = self.soillayers['veld'].replace("'", "", regex=True)
 
         # voeg niveaus t.o.v. NAP toe
-        self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upper"] 
-        self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lower"] 
+        self.soillayers['veld']["upper_NAP"] = self.groundlevel - self.soillayers['veld']["upper"] 
+        self.soillayers['veld']["lower_NAP"] = self.groundlevel - self.soillayers['veld']["lower"] 
 
         # geef de maximaal diepte t.o.v. maaiveld
-        self.finaldepth = self.soillayers["upper_NAP"].max() - self.soillayers["lower_NAP"].min()
+        self.finaldepth = self.soillayers['veld']["upper_NAP"].max() - self.soillayers['veld']["lower_NAP"].min()
 
         # zet de codering om in iets dat geplot kan worden
         material_pattern = re.compile(r'(?P<main>[GKLSVZ])(?P<second>[ghklsvz])?(?P<secondQuantity>\d)?(?P<third>[ghklsvz])?(?P<thirdQuantity>\d)?(?P<fourth>[ghklsvz])?(?P<fourthQuantity>\d)?')
 
         components = []
-        for row in self.soillayers.itertuples():
+        for row in self.soillayers['veld'].itertuples():
             componentsRow = {}
             material = str(getattr(row, 'soilName')) # kreeg een keer 0 als material, vandaar de str
             if 'NBE' in material or '0' in material:
@@ -935,7 +935,7 @@ class Bore():
                 pass
 
             components.append(componentsRow)
-        self.soillayers["components"] = components
+        self.soillayers['veld']["components"] = components
 
 
     def plot(self, path='./output'):
