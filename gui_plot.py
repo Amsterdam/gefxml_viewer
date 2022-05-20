@@ -58,6 +58,7 @@ def plot_tests(files, output):
                 if testType == 'cpt':
                     cpt = Cpt()
                     cpt.load_gef(f)
+                    cpt.interpret()
                     cpt.plot(output)
                 elif testType == 'bore':
                     bore = Bore()
@@ -72,6 +73,7 @@ def plot_tests(files, output):
                 if testType == 'cpt':
                     cpt = Cpt()
                     cpt.load_xml(f)
+                    cpt.interpret()
                     cpt.plot(output)
                 elif testType == 'bore':
                     bore = Bore()

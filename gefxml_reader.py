@@ -511,6 +511,110 @@ class Cpt():
                 else:
                     self.data["depth"] = self.data["penetrationLength"].abs()
 
+    def interpret(self):
+        # functie die later gebruikt wordt
+        is_below = lambda p,a,b: np.cross(p-a, b-a) > 0
+        
+        # de threeType en NEN regels gelden voor log(qc)
+        self.data['logConeResistance'] = np.log(self.data['coneResistance'])
+
+        self.data = self.interpret_qc_only()
+        self.data = self.interpret_three_type(is_below)
+        self.data = self.interpret_nen(is_below)
+        self.data = self.interpret_robertson()
+        self.data = self.interpret_custom()
+
+    def interpret_custom(self):
+        conditions = [
+            self.data['frictionRatio'].le(1.2),
+            self.data['frictionRatio'].ge(4.8),
+        ]
+        choices = [
+            'zand',
+            'veen'
+        ]
+        self.data['customInterpretation'] = np.select(conditions, choices, 'klei')
+        return self.data
+
+    def interpret_qc_only(self):
+        # DFoundations qc only rule
+        conditionsQcOnly = [
+            self.data['coneResistance'] > 4,
+            self.data['coneResistance'] > 1,
+            self.data['coneResistance'] > 0.1
+        ]
+        choicesQcOnly = ['zand', 'klei', 'veen']
+        self.data['qcOnly'] = np.select(conditionsQcOnly, choicesQcOnly, None)
+        return self.data
+
+    def interpret_three_type(self, is_below):
+        # DFoundations 3 type rule [frictionRatio, coneResistance] waarden voor lijn die bovengrens vormt
+        # TODO: resultaat komt niet overeen met DFoundations
+        soils3Type = OrderedDict([
+            ['veen', [np.full((len(self.data), 2), [0., np.log10(0.00002)]), np.full((len(self.data), 2), [10, np.log10(0.2)])]],
+            ['klei', [np.full((len(self.data), 2), [0., np.log10(0.01)]), np.full((len(self.data), 2), [10, np.log10(100)])]],
+            ['zand', [np.full((len(self.data), 2), [0., np.log10(0.5)]), np.full((len(self.data), 2), [10, np.log10(5000)])]]
+            ])
+        # conditions: check of punt onder de bovengrens ligt
+        conditions3Type = [
+            is_below(self.data[['frictionRatio', 'logConeResistance']], value[0], value[1]) for value in soils3Type.values()
+            ]
+        choices3Type = soils3Type.keys()
+        # toewijzen materialen op basis van de conditions
+        self.data['threeType'] = np.select(conditions3Type, choices3Type, None)
+        return self.data
+    
+    def interpret_nen(self, is_below):
+        # DFoundations NEN rule [frictionRatio, coneResistance]
+        # TODO: resultaat komt niet overeen met DFoundations
+        soilsNEN = OrderedDict([
+            #['veen', [[0, np.log10(0)], [10, np.log10(0.08)]]], # slappe consistentie, past niet in schema
+            ['veen', [[0, np.log10(0.000058)], [10, np.log10(.58)]]], # coneResistance van het eerste punt aangepast 
+            #['humeuzeKlei', [[0, np.log10(0.004)], [10, np.log10(39.59)]]], # slappe consistentie, past niet in schema
+            ['humeuzeKlei', [[0, np.log10(0.02)], [10, np.log10(201)]]], 
+            ['klei', [[0, np.log10(0.068)], [10, np.log10(676.1)]]],
+            ['zwakZandigeKlei', [[0, np.log10(0.292)], [10, np.log10(2921)]]],
+            ['sterkZandigeKlei', [[0, np.log10(0.516)], [10, np.log10(5165)]]],
+            ['zwakZandigSilt', [[0, np.log10(1.124)], [10, np.log10(11240)]]],
+            ['sterkZandigSilt', [[0, np.log10(2.498)], [10, np.log10(24980)]]],
+            ['sterkSiltigZand', [[0, np.log10(4.606)], [10, np.log10(46060)]]],
+            ['zwakSiltigZand', [[0, np.log10(8.594)], [10, np.log10(85940)]]],
+            ['zand', [[0, np.log10(13.11)], [10, np.log10(131100)]]],
+            ['grind', [[0, np.log10(24.92)], [10, np.log10(249200)]]]
+            ])
+        
+        conditionsNEN = [
+            is_below(self.data[['frictionRatio', 'logConeResistance']], np.full((len(self.data), 2),value[0]), np.full((len(self.data), 2),value[1])) for value in soilsNEN.values()
+            ]
+        choicesNEN = soilsNEN.keys()
+        self.data['NEN'] = np.select(conditionsNEN, choicesNEN, None)
+        return self.data
+
+    def interpret_robertson(self):
+        # formula from: Soil Behaviour Type from the CPT: an update 
+        # http://www.cpt-robertson.com/PublicationsPDF/2-56%20RobSBT.pdf
+
+        # non-normalized soil behaviour types omgezet naar Nederlandse namen
+        sbtDict = {
+            'veen': 3.6,
+            'klei': 2.95,
+            'zwakKleiigSilt': 2.6,
+            'zwakSiltigZand': 2.05,
+            'sterkSiltigZand': 1.31,
+            'zand': 0,
+        }
+        
+        # formule voor non-normalized soil behaviour type
+        sbt = lambda qc, rf, isbt: ((3.47 - np.log10(qc * 1000 / 100)) ** 2 + (np.log10(rf + 1.22)) ** 2) ** 0.5 - isbt > 0
+        
+        conditions = [
+            sbt(self.data['coneResistance'], self.data['frictionRatio'], value) for value in sbtDict.values()
+        ]
+        choices = sbtDict.keys()
+        self.data[ 'Robertson'] = np.select(conditions, choices, None)
+
+        return self.data
+
 @dataclass
 class Bore():
     #TODO: uitbreiden voor BHR-P en BHR-G, deels werkt het al
@@ -526,7 +630,8 @@ class Bore():
         self.testid = None
         self.date = None
         self.finaldepth = None
-        self.soillayers = pd.DataFrame()
+        self.soillayers = {}
+        self.analyses = []
         self.metadata = {}
         self.descriptionquality = None
 
@@ -557,29 +662,43 @@ class Bore():
                 date = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}
                 self.date = datetime.strptime(date['date'], '%Y-%m-%d')
             
-            elif 'descriptionQuality' in element.tag:
-                self.descriptionquality = element.text
 
-            elif 'layer' in element.tag:
-                self.soillayers.append({re.sub(r'{.*}', '', p.tag) : re.sub(r'\s*', '', p.text) for p in element.iter() if p.text is not None})
+            elif 'descriptiveBoreholeLog' in element.tag:
+                for child in element.iter():
+                    if 'descriptionQuality' in child.tag:
+                        descriptionquality = child.text
+                    elif 'descriptionLocation' in child.tag:
+                        descriptionLocation = child.text
+                        soillayers = []
+                    elif 'layer' in child.tag:
+                        # TODO: onderscheid maken tussen veld en labbeschrijving
+                        soillayers.append({re.sub(r'{.*}', '', p.tag) : re.sub(r'\s*', '', p.text) for p in child.iter() if p.text is not None})
+                # zet soillayers om in dataframe om het makkelijker te verwerken
+                self.soillayers[descriptionLocation] = pd.DataFrame(soillayers) 
+
+            elif 'boreholeSampleAnalysis' in element.tag:
+                for child in element.iter():
+                    if 'investigatedInterval' in child.tag:
+                        self.analyses.append({re.sub(r'{.*}', '', p.tag) : re.sub(r'\s*', '', p.text) for p in child.iter() if p.text is not None})
+
 
         self.metadata = {"easting": self.easting, "northing": self.northing, "groundlevel": self.groundlevel, "testid": self.testid, "date": self.date, "finaldepth": self.finaldepth}
 
-        # zet om in een dataframe om het makkelijker te verwerken
-        self.soillayers = pd.DataFrame(self.soillayers)
-        
-        self.soillayers = self.add_components(self)
+        for descriptionLocation, soillayers in self.soillayers.items():
+            # TODO: mogelijk verwarrend om soillayers en self.soillayers te combineren
+            # voeg de componenten toe t.b.v. plot       
+            self.soillayers[descriptionLocation] = self.add_components(soillayers)
 
-        # specialMaterial was voor het maken van de componenten op NBE gezet, nu weer terug naar de oorspronkelijke waarde
-        if "specialMaterial" in self.soillayers.columns:
-            self.soillayers["soilName"][self.soillayers["soilName"] == "NBE"] = self.soillayers["specialMaterial"]
-        
-        # voeg kolommen toe met absolute niveaus (t.o.v. NAP)
-        self.soillayers["upperBoundary"] = pd.to_numeric(self.soillayers["upperBoundary"])
-        self.soillayers["lowerBoundary"] = pd.to_numeric(self.soillayers["lowerBoundary"])
+            # specialMaterial was voor het maken van de componenten op NBE gezet, nu weer terug naar de oorspronkelijke waarde
+            if "specialMaterial" in soillayers.columns:
+                self.soillayers[descriptionLocation][self.soillayers[descriptionLocation]["soilName"] == "NBE"]["soilName"] = soillayers["specialMaterial"]
+            
+            # voeg kolommen toe met absolute niveaus (t.o.v. NAP)
+            self.soillayers[descriptionLocation]["upperBoundary"] = pd.to_numeric(soillayers["upperBoundary"])
+            self.soillayers[descriptionLocation]["lowerBoundary"] = pd.to_numeric(soillayers["lowerBoundary"])
 
-        self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upperBoundary"] 
-        self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lowerBoundary"] 
+            self.soillayers[descriptionLocation]["upper_NAP"] = self.groundlevel - soillayers["upperBoundary"] 
+            self.soillayers[descriptionLocation]["lower_NAP"] = self.groundlevel - soillayers["lowerBoundary"] 
 
     def load_gef(self, gefFile):
 
@@ -653,7 +772,7 @@ class Bore():
             pass
         try:
             match = re.search(data_pattern, gef_raw)
-            self.soillayers = match.group('data')
+            self.soillayers['veld'] = match.group('data') # TODO: lab toevoegen
         except:
             pass
 
@@ -720,11 +839,11 @@ class Bore():
             pass
         
         # zet de data om in een dataframe, dan kunnen we er wat mee    
-        self.soillayers = pd.read_csv(StringIO(self.soillayers), sep=self.columnseparator, skipinitialspace=True, header=None)
+        self.soillayers['veld'] = pd.read_csv(StringIO(self.soillayers['veld']), sep=self.columnseparator, skipinitialspace=True, header=None)
         
         # vervang de dummy waarden door nan
         for columnnr, voidvalue in self.columnvoid_values.items():
-            self.soillayers[columnnr] = self.soillayers[columnnr].replace(voidvalue, np.nan)
+            self.soillayers['veld'][columnnr] = self.soillayers['veld'][columnnr].replace(voidvalue, np.nan)
 
         # TODO: deze namen kloppen wellicht niet helemaal
         self.columninfo[max(self.columninfo.keys()) + 1] = 'soilName'
@@ -732,22 +851,22 @@ class Bore():
         self.columninfo[max(self.columninfo.keys()) + 1] = 'materialproperties'
 
         # geef de kolommen andere namen
-        self.soillayers = self.soillayers.rename(columns=self.columninfo)
+        self.soillayers['veld'] = self.soillayers['veld'].rename(columns=self.columninfo)
 
-        self.soillayers = self.soillayers.replace("'", "", regex=True)
+        self.soillayers['veld'] = self.soillayers['veld'].replace("'", "", regex=True)
 
         # voeg niveaus t.o.v. NAP toe
-        self.soillayers["upper_NAP"] = self.groundlevel - self.soillayers["upper"] 
-        self.soillayers["lower_NAP"] = self.groundlevel - self.soillayers["lower"] 
+        self.soillayers['veld']["upper_NAP"] = self.groundlevel - self.soillayers['veld']["upper"] 
+        self.soillayers['veld']["lower_NAP"] = self.groundlevel - self.soillayers['veld']["lower"] 
 
         # geef de maximaal diepte t.o.v. maaiveld
-        self.finaldepth = self.soillayers["upper_NAP"].max() - self.soillayers["lower_NAP"].min()
+        self.finaldepth = self.soillayers['veld']["upper_NAP"].max() - self.soillayers['veld']["lower_NAP"].min()
 
         # zet de codering om in iets dat geplot kan worden
         material_pattern = re.compile(r'(?P<main>[GKLSVZ])(?P<second>[ghklsvz])?(?P<secondQuantity>\d)?(?P<third>[ghklsvz])?(?P<thirdQuantity>\d)?(?P<fourth>[ghklsvz])?(?P<fourthQuantity>\d)?')
 
         components = []
-        for row in self.soillayers.itertuples():
+        for row in self.soillayers['veld'].itertuples():
             componentsRow = {}
             material = str(getattr(row, 'soilName')) # kreeg een keer 0 als material, vandaar de str
             if 'NBE' in material or '0' in material:
@@ -816,38 +935,45 @@ class Bore():
                 pass
 
             components.append(componentsRow)
-        self.soillayers["components"] = components
+        self.soillayers['veld']["components"] = components
 
 
     def plot(self, path='./output'):
-        # maak een eenvoudige plot van een boring
-        uppers = list(self.soillayers["upper_NAP"])
-        lowers = list(self.soillayers["lower_NAP"])
 
+        materials = {0: 'grind', 1: 'zand', 2: 'klei', 3: 'leem', 4: 'veen', 5: 'silt', 6: 'overig'}
+        colorsDict = {0: "orange", 1: "yellow", 2: "green", 3: "yellowgreen", 4: "brown", 5: "grey", 6: "black"} # BRO style
+        hatchesDict = {0: "ooo", 1: "...", 2: "///", 3:"", 4: "---", 5: "|||", 6: ""} # BRO style
+
+        nrOfLogs = len(self.soillayers.keys())
         # maak een diagram met primaire en secundaire componenten
         fig = plt.figure(figsize=(6, self.finaldepth + 2)) 
-        gs = GridSpec(2, 2, height_ratios=[self.finaldepth, 2], width_ratios=[2, 1] , figure=fig)
-        
+        gs = GridSpec(nrows=2, ncols=2 * nrOfLogs, height_ratios=[self.finaldepth, 2], width_ratios=np.tile([2, 1], nrOfLogs), figure=fig)
         axes = []
-        axes.append(fig.add_subplot(gs[0, 0]))
-        axes.append(fig.add_subplot(gs[0, 1], sharey=axes[0]))
-        axes.append(fig.add_subplot(gs[1,:]))
 
-        components = list(self.soillayers["components"])
-        colorsDict = {0: "orange", 1: "yellow", 4: "brown", 2: "steelblue", 0: "gray", 5: "lime", 3: "purple", 6: "black"}
-        hatchesDict = {1: "...", 4: "---", 2: "///", 0: "ooo", 5: "\\\\\\", 3:"", 6: ""}
-        for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
-            left = 0
-            for comp, nr in component.items():
-                barPlot = axes[0].barh(lower, width=comp, left=left, height=upper-lower, color=colorsDict[nr], hatch=hatchesDict[nr], edgecolor="black", align="edge")
-                left += comp
+        for i, [descriptionLocation, soillayers] in enumerate(self.soillayers.items()):
+            axes.append(fig.add_subplot(gs[0, i * 2])) # boorstaat 
+            axes.append(fig.add_subplot(gs[0, i * 2 + 1], sharey=axes[0])) # toelichting 
+        
+            # maak een eenvoudige plot van een boring
+            uppers = list(soillayers["upper_NAP"])
+            lowers = list(soillayers["lower_NAP"])
+            components = list(soillayers["components"])
 
-        axes[0].set_ylim([self.groundlevel - self.finaldepth, self.groundlevel])
-        axes[0].set_xticks([])
-        axes[0].set_ylabel('diepte [m t.o.v. NAP]')
+            for upper, lower, component in reversed(list(zip(uppers, lowers, components))):
+                left = 0
+                try: # TODO: kan dit beter. Gemaakt vanwege een geval met component = nan (lab boring van Anthony Moddermanstraat)
+                    for comp, nr in component.items():
+                        barPlot = axes[i * 2].barh(lower, width=comp, left=left, height=upper-lower, color=colorsDict[nr], hatch=hatchesDict[nr], edgecolor="black", align="edge")
+                        left += comp
+                except:
+                    pass
+
+            axes[i * 2].set_ylim([self.groundlevel - self.finaldepth, self.groundlevel])
+            axes[i * 2].set_xticks([])
+            axes[i * 2].set_ylabel('diepte [m t.o.v. NAP]')
 
         # voeg de beschrijving toe
-        for layer in self.soillayers.itertuples():
+        for layer in soillayers.itertuples():
             y = (getattr(layer, "lower_NAP") + getattr(layer, "upper_NAP")) / 2
             propertiesText = ""
             for materialproperty in ['tertiaryConstituent', 'colour', 'dispersedInhomogeneity', 'carbonateContentClass',
@@ -855,7 +981,7 @@ class Bore():
                                         'sizeFraction', 'angularity', 'sphericity', 'fineSoilConsistency',
                                         'organicSoilTexture', 'organicSoilConsistency', 'peatTensileStrength']:
                 # TODO: dit werkt nog niet goed
-                if materialproperty in self.soillayers.columns:
+                if materialproperty in soillayers.columns:
                     value = getattr(layer, materialproperty)
                     try:
                         np.isnan(value)
@@ -864,84 +990,23 @@ class Bore():
             text = f'{getattr(layer, "soilName")}{propertiesText}'
             axes[1].text(0, y, text, wrap=True)
 
+        # voeg een stempel toe
+        axes.append(fig.add_subplot(gs[1,:])) # stempel
 
         # verberg de assen van de onderste plot en rechtse plot zodat deze gebruikt kunnen worden voor tekst
-        axes[1].set_axis_off()
-        axes[2].set_axis_off()
+        axes[1].set_axis_off() # toelichting op veldbeschrijving
+        axes[-1].set_axis_off() # stempel
         plt.text(0.05, 0.6, f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\nkwaliteit: {self.descriptionquality}\ndatum: {self.date}', fontsize=14, fontweight='bold')
         plt.text(0.05, 0.2, 'Ingenieursbureau Gemeente Amsterdam Vakgroep Geotechniek Python ', fontsize=10)
         plt.tight_layout()
         plt.savefig(fname=f'{path}/{self.testid}.png')
         plt.close('all')
 
-    def interpret_qc_only(self, cpt):
-        # DFoundations qc only rule
-        conditionsQcOnly = [
-            cpt.data['coneResistance'] > 4,
-            cpt.data['coneResistance'] > 1,
-            cpt.data['coneResistance'] > 0.1
-        ]
-        choicesQcOnly = ['zand', 'klei', 'veen']
-        cpt.data['qcOnly'] = np.select(conditionsQcOnly, choicesQcOnly, np.nan)
-        return cpt.data
 
-    def interpret_three_type(self, cpt, is_below):
-        # DFoundations 3 type rule [frictionRatio, coneResistance] waarden voor lijn die bovengrens vormt
-        soils3Type = OrderedDict([
-            ['veen', [np.full((len(cpt.data), 2), [0., np.log10(0.00002)]), np.full((len(cpt.data), 2), [10, np.log10(0.2)])]],
-            ['klei', [np.full((len(cpt.data), 2), [0., np.log10(0.01)]), np.full((len(cpt.data), 2), [10, np.log10(100)])]],
-            ['zand', [np.full((len(cpt.data), 2), [0., np.log10(0.5)]), np.full((len(cpt.data), 2), [10, np.log10(5000)])]]
-            ])
-        # conditions: check of punt onder de bovengrens ligt
-        conditions3Type = [
-            is_below(cpt.data[['frictionRatio', 'logConeResistance']], value[0], value[1]) for value in soils3Type.values()
-            ]
-        choices3Type = soils3Type.keys()
-        # toewijzen materialen op basis van de conditions
-        cpt.data['threeType'] = np.select(conditions3Type, choices3Type, None)
-        return cpt.data
-    
-    def interpret_nen(self, cpt, is_below):
-        # DFoundations NEN rule [frictionRatio, coneResistance]
-        soilsNEN = OrderedDict([
-            #['veen', [[0, np.log10(0)], [10, np.log10(0.08)]]], # slappe consistentie, past niet in schema
-            ['veen', [[0, np.log10(0.000058)], [10, np.log10(.58)]]], # coneResistance van het eerste punt aangepast 
-            #['humeuzeKlei', [[0, np.log10(0.004)], [10, np.log10(39.59)]]], # slappe consistentie, past niet in schema
-            ['humeuzeKlei', [[0, np.log10(0.02)], [10, np.log10(201)]]], 
-            ['klei', [[0, np.log10(0.068)], [10, np.log10(676.1)]]],
-            ['zwakZandigeKlei', [[0, np.log10(0.292)], [10, np.log10(2921)]]],
-            ['sterkZandigeKlei', [[0, np.log10(0.516)], [10, np.log10(5165)]]],
-            ['zwakZandigSilt', [[0, np.log10(1.124)], [10, np.log10(11240)]]],
-            ['sterkZandigSilt', [[0, np.log10(2.498)], [10, np.log10(24980)]]],
-            ['sterkSiltigZand', [[0, np.log10(4.606)], [10, np.log10(46060)]]],
-            ['zwakSiltigZand', [[0, np.log10(8.594)], [10, np.log10(85940)]]],
-            ['zand', [[0, np.log10(13.11)], [10, np.log10(131100)]]],
-            ['grind', [[0, np.log10(24.92)], [10, np.log10(249200)]]]
-            ])
-        
-        conditionsNEN = [
-            is_below(cpt.data[['frictionRatio', 'logConeResistance']], np.full((len(cpt.data), 2),value[0]), np.full((len(cpt.data), 2),value[1])) for value in soilsNEN.values()
-            ]
-        choicesNEN = soilsNEN.keys()
-        cpt.data['NEN'] = np.select(conditionsNEN, choicesNEN, None)
-        return cpt.data
-
-    def from_cpt(self, cpt):
-        #TODO: functies voor de  interpretaties passen wellicht beter bij de Cpt class
-
-        # functie die later gebruikt wordt
-        is_below = lambda p,a,b: np.cross(p-a, b-a) > 0
-        
-        # de threeType en NEN regels gelden voor log(qc)
-        cpt.data['logConeResistance'] = np.log(cpt.data['coneResistance'])
-
-        cpt.data = self.interpret_qc_only(cpt)
-        cpt.data = self.interpret_three_type(cpt, is_below)
-        cpt.data = self.interpret_nen(cpt, is_below)
-
+    def from_cpt(self, cpt, interpretationModel='customInterpretation'):
 
         # maak een object alsof het een boring is
-        self.soillayers['geotechnicalSoilName'] = cpt.data['threeType']
+        self.soillayers['geotechnicalSoilName'] = cpt.data[interpretationModel]
         # TODO frictionRatio en coneResistance horen er eigenlijk niet in thuis, maar zijn handig als referentie
         self.soillayers[['frictionRatio', 'coneResistance']] = cpt.data[['frictionRatio', 'coneResistance']]
         self.groundlevel = cpt.groundlevel
@@ -970,10 +1035,10 @@ class Bore():
         
         self.soillayers.dropna(inplace=True)
 
-    def add_components(self):
+    def add_components(self, soillayers):
         # voeg verdeling componenten toe
         # van https://github.com/cemsbv/pygef/blob/master/pygef/broxml.py
-        material_components = ["gravel_component", "sand_component", "clay_component", "loam_component", "peat_component", "silt_component"]
+        material_components = ["gravel_component", "sand_component", "clay_component", "loam_component", "peat_component", "silt_component", "special_material"]
         soil_names_dict_lists = {
             "betonOngebroken": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # specialMaterial
             "grind":  [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -985,6 +1050,7 @@ class Bore():
             "kleiigZandMetGrind": [0.05, 0.65, 0.3, 0.0, 0.0, 0.0],
             "NBE": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], # specialMaterial
             "puin": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # specialMaterial
+            "silt" : [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
             "siltigZand": [0.0, 0.7, 0.0, 0.0, 0.0, 0.3],
             "siltigZandMetGrind": [0.05, 0.65, 0.0, 0.0, 0.0, 0.3],
             "sterkGrindigZand": [0.3, 0.7, 0.0, 0.0, 0.0, 0.0],
@@ -1014,7 +1080,7 @@ class Bore():
             soil_names_dict_dicts[key] = dict(sorted({v: i for i, v in enumerate(value)}.items(), reverse=True))
 
         # TODO: soilNameNEN5104 specialMaterial
-        self.soillayers["soilName"] = np.where(self.soillayers["geotechnicalSoilName"].isna(), "NBE", self.soillayers["geotechnicalSoilName"])
+        soillayers["soilName"] = np.where(soillayers["geotechnicalSoilName"].isna(), "NBE", soillayers["geotechnicalSoilName"])
         # voeg de componenten toe
-        self.soillayers["components"] = self.soillayers["soilName"].map(soil_names_dict_dicts)
-        return self.soillayers
+        soillayers["components"] = soillayers["soilName"].map(soil_names_dict_dicts)
+        return soillayers
