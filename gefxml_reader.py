@@ -569,19 +569,19 @@ class Cpt():
         # DFoundations NEN rule [frictionRatio, coneResistance]
         # TODO: resultaat komt niet overeen met DFoundations
         soilsNEN = OrderedDict([
-            #['veen', [[0, np.log10(0)], [10, np.log10(0.08)]]], # slappe consistentie, past niet in schema
-            ['veen', [[0, np.log10(0.000058)], [10, np.log10(.58)]]], # coneResistance van het eerste punt aangepast 
-            #['humeuzeKlei', [[0, np.log10(0.004)], [10, np.log10(39.59)]]], # slappe consistentie, past niet in schema
-            ['humeuzeKlei', [[0, np.log10(0.02)], [10, np.log10(201)]]], 
-            ['klei', [[0, np.log10(0.068)], [10, np.log10(676.1)]]],
-            ['zwakZandigeKlei', [[0, np.log10(0.292)], [10, np.log10(2921)]]],
-            ['sterkZandigeKlei', [[0, np.log10(0.516)], [10, np.log10(5165)]]],
-            ['zwakZandigSilt', [[0, np.log10(1.124)], [10, np.log10(11240)]]],
-            ['sterkZandigSilt', [[0, np.log10(2.498)], [10, np.log10(24980)]]],
-            ['sterkSiltigZand', [[0, np.log10(4.606)], [10, np.log10(46060)]]],
-            ['zwakSiltigZand', [[0, np.log10(8.594)], [10, np.log10(85940)]]],
-            ['zand', [[0, np.log10(13.11)], [10, np.log10(131100)]]],
-            ['grind', [[0, np.log10(24.92)], [10, np.log10(249200)]]]
+            #['veen', [[np.log10(0.0001), np.log10(0)], [np.log10(10), np.log10(0.08)]]], # slappe consistentie, past niet in schema
+            ['veen', [[np.log10(0.0001), np.log10(0.000058)], [np.log10(10), np.log10(.58)]]], # coneResistance van het eerste punt aangepast 
+            #['humeuzeKlei', [[np.log10(0.0001), np.log10(0.004)], [np.log10(10), np.log10(39.59)]]], # slappe consistentie, past niet in schema
+            ['humeuzeKlei', [[np.log10(0.0001), np.log10(0.02)], [np.log10(10), np.log10(201)]]], 
+            ['klei', [[np.log10(0.0001), np.log10(0.068)], [np.log10(10), np.log10(676.1)]]],
+            ['zwakZandigeKlei', [[np.log10(0.0001), np.log10(0.292)], [np.log10(10), np.log10(2921)]]],
+            ['sterkZandigeKlei', [[np.log10(0.0001), np.log10(0.516)], [np.log10(10), np.log10(5165)]]],
+            ['zwakZandigSilt', [[np.log10(0.0001), np.log10(1.124)], [np.log10(10), np.log10(11240)]]],
+            ['sterkZandigSilt', [[np.log10(0.0001), np.log10(2.498)], [np.log10(10), np.log10(24980)]]],
+            ['sterkSiltigZand', [[np.log10(0.0001), np.log10(4.606)], [np.log10(10), np.log10(46060)]]],
+            ['zwakSiltigZand', [[np.log10(0.0001), np.log10(8.594)], [np.log10(10), np.log10(85940)]]],
+            ['zand', [[np.log10(0.0001), np.log10(13.11)], [np.log10(10), np.log10(131100)]]],
+            ['grind', [[np.log10(0.0001), np.log10(24.92)], [np.log10(10), np.log10(249200)]]]
             ])
         
         conditionsNEN = [
