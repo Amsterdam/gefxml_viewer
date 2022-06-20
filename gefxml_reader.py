@@ -683,7 +683,8 @@ class Bore():
                 for child in element.iter():
                     if 'investigatedInterval' in child.tag:
                         self.analyses.append({re.sub(r'{.*}', '', p.tag) : re.sub(r'\s*', '', p.text) for p in child.iter() if p.text is not None})
-
+                self.analyses = pd.DataFrame().from_dict(self.analyses)
+                self.analyses = self.analyses.astype(float, errors='ignore')
 
         self.metadata = {"easting": self.easting, "northing": self.northing, "groundlevel": self.groundlevel, "testid": self.testid, "date": self.date, "finaldepth": self.finaldepth}
 
@@ -1050,34 +1051,35 @@ class Bore():
     def from_cpt(self, cpt, interpretationModel='customInterpretation'):
 
         # maak een object alsof het een boring is
-        self.soillayers['geotechnicalSoilName'] = cpt.data[interpretationModel]
+        self.soillayers['cpt']= pd.DataFrame(columns=['geotechnicalSoilName', 'frictionRatio', 'coneResistance', 'upper_NAP', 'lower_NAP'])
+        self.soillayers['cpt']['geotechnicalSoilName'] = cpt.data[interpretationModel]
         # TODO frictionRatio en coneResistance horen er eigenlijk niet in thuis, maar zijn handig als referentie
-        self.soillayers[['frictionRatio', 'coneResistance']] = cpt.data[['frictionRatio', 'coneResistance']]
+        self.soillayers['cpt'][['frictionRatio', 'coneResistance']] = cpt.data[['frictionRatio', 'coneResistance']]
         self.groundlevel = cpt.groundlevel
         self.finaldepth = cpt.data['depth'].max()
         self.descriptionquality = 'cpt'
         self.testid = cpt.testid
         self.easting = cpt.easting
         self.northing = cpt.northing
-        self.soillayers = self.add_components()
+        self.soillayers['cpt'] = self.add_components(self.soillayers['cpt'])
 
         # verwijder de lagen met hetzelfde materiaal
-        self.soillayers = self.soillayers[self.soillayers['geotechnicalSoilName'].ne(self.soillayers['geotechnicalSoilName'].shift(1))]
+        self.soillayers['cpt'] = self.soillayers['cpt'][self.soillayers['cpt']['geotechnicalSoilName'].ne(self.soillayers['cpt']['geotechnicalSoilName'].shift(1))]
 
         # voeg de laatste regel weer toe
-        lastrow = self.soillayers.iloc[-1]
-        self.soillayers.append(lastrow)
+        lastrow = self.soillayers['cpt'].iloc[-1]
+        self.soillayers['cpt'].append(lastrow)
 
         # vul de regels die buiten de schaal vallen met wat er boven zit
-        self.soillayers['geotechnicalSoilName'].fillna(method='ffill', inplace=True)
+        self.soillayers['cpt']['geotechnicalSoilName'].fillna(method='ffill', inplace=True)
 
-        # voeg laaggrenzen toe        
-        self.soillayers['upper_NAP'] = cpt.groundlevel - cpt.data['depth']
-        self.soillayers['lower_NAP'] = self.soillayers['upper_NAP'].shift(-1)
+        # voeg laaggrenzen toe    
+        self.soillayers['cpt']['upper_NAP'] = cpt.groundlevel - cpt.data['depth']
+        self.soillayers['cpt']['lower_NAP'] = self.soillayers['cpt']['upper_NAP'].shift(-1)
         # voeg de onderkant van de onderste laag toe
-        self.soillayers.loc[self.soillayers.index.max(), 'lower_NAP'] = cpt.groundlevel - self.finaldepth
+        self.soillayers['cpt'].loc[self.soillayers['cpt'].index.max(), 'lower_NAP'] = cpt.groundlevel - self.finaldepth
         
-        self.soillayers.dropna(inplace=True)
+        self.soillayers['cpt'].dropna(inplace=True)
 
     def add_components(self, soillayers):
         # voeg verdeling componenten toe
@@ -1120,6 +1122,8 @@ class Bore():
 
         # voor sorteren op bijdrage is het handiger om een dictionary te maken
         soil_names_dict_dicts = {}
+        
+        # sorteer ze van groot naar klein voor de plot 
         for key, value in soil_names_dict_lists.items():
             soil_names_dict_dicts[key] = dict(sorted({v: i for i, v in enumerate(value)}.items(), reverse=True))
 

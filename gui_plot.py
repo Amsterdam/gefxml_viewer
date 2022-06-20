@@ -53,35 +53,38 @@ def plot_tests(files, output):
     for f in files:
         print(f)
         if f.lower().endswith('gef'):
-            try:
+#            try:
                 testType = Test().load_gef(f)
                 if testType == 'cpt':
                     cpt = Cpt()
                     cpt.load_gef(f)
                     cpt.interpret()
                     cpt.plot(output)
+                    cptAsBore = Bore()
+                    cptAsBore.from_cpt(cpt, interpretationModel='Robertson') # 'qcOnly', 'threeType', 'NEN', 'Robertson', 'customInterpretation' 
+                    cptAsBore.plot(path='./output/cptasbore')
                 elif testType == 'bore':
                     bore = Bore()
                     bore.load_gef(f)
                     bore.plot(output)
-            except:
-                print(f'{f} fout in bestand')
-                pass
+#            except:
+#                print(f'{f} fout in bestand')
+#                pass
         elif f.lower().endswith('xml'):
-            try:
+#            try:
                 testType = Test().load_xml(f)
                 if testType == 'cpt':
                     cpt = Cpt()
                     cpt.load_xml(f)
-                    cpt.interpret()
+#                    cpt.interpret() # TODO: dit geeft soms een foutmelding met ontbrekende frictionRatio
                     cpt.plot(output)
                 elif testType == 'bore':
                     bore = Bore()
                     bore.load_xml(f)
                     bore.plot(output)
-            except:
-                print(f'{f} fout in bestand')
-                pass
+#            except:
+#                print(f'{f} fout in bestand')
+#                pass
 
 if main_win.sourceFolder != '':
     filelist = os.listdir(main_win.sourceFolder)
