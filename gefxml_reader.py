@@ -949,11 +949,35 @@ class Bore():
 
         # als er een veld- en een labbeschrijving is, dan maken we meer kolommen
         nrOfLogs = len(self.soillayers.keys())
-        # maak een diagram met primaire en secundaire componenten
-        fig = plt.figure(figsize=(6, self.finaldepth + 2)) 
-        gs = GridSpec(nrows=2, ncols=2 * nrOfLogs, height_ratios=[self.finaldepth, 2], width_ratios=np.tile([2, 1], nrOfLogs), figure=fig)
+
+        # figuur breedte instellen, 6 werkt goed voor alleen een veldbeschrijving
+        if nrOfLogs == 1:
+            width = 6
+            width_ratios = [1, 3] # boorstaat, beschrijving
+
+        # in geval van lab is het gecompliceerder
+        # als er alleen veld- en labbeschrijving is, geen testen, dan is self.analyses nog een dict (niet omgezet in DataFrame)
+        elif isinstance(self.analyses, dict):
+            width = 18
+            width_ratios = [1, 3, 0.5, 3]
+
+        # zijn er wel testen, dan alleen de numerieke kolommen selecteren voor plot
+        elif isinstance(self.analyses, pd.DataFrame):
+            # filter alleen de numerieke kolommen
+            self.analyses = self.analyses.apply(lambda x: pd.to_numeric(x.astype(str).str.replace(',',''), errors='coerce')).dropna(axis='columns', how='all')
+
+            width = 24
+            # voeg kolommen toe voor de plot van de meetwaarden
+            # beginDepth en endDepth doen niet mee
+            width_ratios = [1, 3, 0.5, 3, 1, 1] # TODO: lengte moet afhankelijk van aantal meetkolommen
+            nrOfLogs += 1 # TODO: waarde moet afhankelijk van aantal meetkolommen
+
+        # maak een diagram 
+        fig = plt.figure(figsize=(width, self.finaldepth + 2)) 
+        gs = GridSpec(nrows=2, ncols=2 * nrOfLogs, height_ratios=[self.finaldepth, 2], width_ratios=width_ratios, figure=fig)
         axes = []
 
+        # als er veld- en labbeschrijving is, dan worden deze apart geplot
         for i, [descriptionLocation, soillayers] in enumerate(self.soillayers.items()):
             axes.append(fig.add_subplot(gs[0, i * 2])) # boorstaat 
             axes.append(fig.add_subplot(gs[0, i * 2 + 1], sharey=axes[0])) # toelichting 
@@ -975,34 +999,50 @@ class Bore():
             axes[i * 2].set_ylim([self.groundlevel - self.finaldepth, self.groundlevel])
             axes[i * 2].set_xticks([])
             axes[i * 2].set_ylabel('diepte [m t.o.v. NAP]')
+            plt.title(descriptionLocation) 
 
-        # voeg de beschrijving toe
-        for layer in soillayers.itertuples():
-            y = (getattr(layer, "lower_NAP") + getattr(layer, "upper_NAP")) / 2
-            propertiesText = ""
-            for materialproperty in ['tertiaryConstituent', 'colour', 'dispersedInhomogeneity', 'carbonateContentClass',
-                                        'organicMatterContentClass', 'mixed', 'sandMedianClass', 'grainshape',
-                                        'sizeFraction', 'angularity', 'sphericity', 'fineSoilConsistency',
-                                        'organicSoilTexture', 'organicSoilConsistency', 'peatTensileStrength']:
-                # TODO: dit werkt nog niet goed
-                if materialproperty in soillayers.columns:
-                    value = getattr(layer, materialproperty)
-                    try:
-                        np.isnan(value)
-                    except:
-                        propertiesText += f', {value}'
-            text = f'{getattr(layer, "soilName")}{propertiesText}'
-            axes[1].text(0, y, text, wrap=True)
+            # voeg de beschrijving toe
+            for layer in soillayers.itertuples():
+                y = (getattr(layer, "lower_NAP") + getattr(layer, "upper_NAP")) / 2
+                propertiesText = ""
+                for materialproperty in ['tertiaryConstituent', 'colour', 'dispersedInhomogeneity', 'carbonateContentClass',
+                                            'organicMatterContentClass', 'mixed', 'sandMedianClass', 'grainshape', # TODO: sandMedianClass kan ook mooi visueel
+                                            'sizeFraction', 'angularity', 'sphericity', 'fineSoilConsistency',
+                                            'organicSoilTexture', 'organicSoilConsistency', 'peatTensileStrength']:
+                    # TODO: dit werkt nog niet goed
+                    if materialproperty in soillayers.columns:
+                        value = getattr(layer, materialproperty)
+                        try:
+                            np.isnan(value)
+                        except:
+                            propertiesText += f', {value}'
+                text = f'{getattr(layer, "soilName")}{propertiesText}'
+                axes[i * 2 + 1].text(0, y, text, wrap=True)
+                # verberg de assen van de beschrijving
+                axes[i * 2 + 1].set_axis_off() 
+
+                plt.title(descriptionLocation)
+        
+        # als er analyses zijn uitgevoerd, deze ook toevoegen
+        # TODO: filteren welke wel / niet of samen
+        # TODO: korrelgrootte uit beschrijving toevoegen?
+        if isinstance(self.analyses, pd.DataFrame):
+            averageDepth = self.groundlevel - self.analyses[['beginDepth', 'endDepth']].mean(axis=1)
+            # voeg axes toe voor de plots
+            for j, col in enumerate([col for col in self.analyses.columns if col not in ['beginDepth', 'endDepth']]):
+                    axes.append(fig.add_subplot(gs[0, i * 2 + 2 + j], sharey=axes[0]))
+                    axes[i * 2 + 2 + j].plot(self.analyses[col], averageDepth, '.')
+                    plt.title(col)
 
         # voeg een stempel toe
         axes.append(fig.add_subplot(gs[1,:])) # stempel
-
-        # verberg de assen van de onderste plot en rechtse plot zodat deze gebruikt kunnen worden voor tekst
-        axes[1].set_axis_off() # toelichting op veldbeschrijving
-        axes[-1].set_axis_off() # stempel
+        # verberg de assen van de stempel
+        axes[-1].set_axis_off()
+        # tekst voor de stempel
         plt.text(0.05, 0.6, f'Boring: {self.testid}\nx-coördinaat: {self.easting}\ny-coördinaat: {self.northing}\nmaaiveld: {self.groundlevel}\nkwaliteit: {self.descriptionquality}\ndatum: {self.date}', fontsize=14, fontweight='bold')
         plt.text(0.05, 0.2, 'Ingenieursbureau Gemeente Amsterdam Vakgroep Geotechniek Python ', fontsize=10)
-        plt.tight_layout()
+
+#        plt.tight_layout() # TODO: werkt niet met text die wrapt
         plt.savefig(fname=f'{path}/{self.testid}.png')
         plt.close('all')
 
