@@ -24,6 +24,7 @@ from datetime import date, datetime
 from shapely.geometry import Point
 import geopandas as gpd
 from xml.etree.ElementTree import ElementTree
+import pyproj
 
 @dataclass
 class Test():
@@ -1084,3 +1085,155 @@ class Bore():
         # voeg de componenten toe
         soillayers["components"] = soillayers["soilName"].map(soil_names_dict_dicts)
         return soillayers
+
+@dataclass
+class Multibore():
+    def __init__(self):
+        self.bores = []
+
+    def load_xml_sikb0101(self, xmlFile):
+
+        #TODO: dit moet eigenlijk met een boreVerzameling object zoals in het lengteprofiel
+
+        # lees boringen in vanuit een SIKB0101 XML
+        # anders dan de BRO komen alle boringen van een project in 1 bestand
+        tree = ElementTree()
+        tree.parse(xmlFile)
+        root = tree.getroot()
+
+        tests = {}
+        properties = {}
+        boreXYZ = {}
+
+        # nodig voor omzetten latlong in rd
+        wgs84 = pyproj.Proj(projparams='epsg:4326')
+        rd = pyproj.Proj(projparams='epsg:28992')
+
+        # vul de dictionary tests met keys voor de boringen
+        for element in root.iter():
+            # vul de dictionaries voor de boringen met lagen
+            if 'Borehole' in element.tag:
+                for key in element.attrib.keys():
+                    if 'id' in key:
+                        boreId = element.attrib[key]
+                        if boreId not in boreXYZ.keys():
+                            boreXYZ[boreId] = {}
+                    for child in element.iter():
+                        # lagen koppelen aan boringen
+                        if 'relatedSamplingFeature' in child.tag:
+                            for key in child.attrib.keys():
+                                if 'href' in key:
+                                    layerId = child.attrib[key].replace('#', '')
+                                    tests[layerId] = boreId
+                        elif 'groundLevel' in child.tag:
+                            for p in child.iter(): 
+                                if 'value' in p.tag:
+                                    boreXYZ[boreId]['groundlevel'] = float(p.text)
+                        elif 'geometry' in child.tag:
+                            for p in child.iter(): 
+                                if 'pos' in p.tag: 
+                                    longitude = float(p.text.split()[0])
+                                    latitude = float(p.text.split()[1])
+                                    x, y = pyproj.transform(wgs84, rd, latitude, longitude)
+                                    boreXYZ[boreId]['easting'] =  x
+                                    boreXYZ[boreId]['northing'] = y
+
+            # lagen inlezen
+            # TODO: dit is niet mooi, maar het werkt wel.
+            elif 'featureMember' in element.tag:
+                featureId, upperDepth, lowerDepth, grondsoort = None, None, None, None
+                for child in element.iter():
+                    # bepaal de id van de featureMember
+                    # deze komt altijd voor de andere waarden
+                    for key in child.attrib.keys():
+                        if 'Layer' in child.tag and 'id' in key: 
+                            featureId = child.attrib[key]
+                            if featureId not in properties.keys():
+                                properties[featureId] = {}
+                            for child in element.iter():
+                                if 'upperDepth' in child.tag:
+                                    for inmeting in child.iter():
+                                        if 'value' in inmeting.tag:
+                                            upperDepth = float(inmeting.text)
+                                            properties[featureId]['upper'] = upperDepth / 100
+                                elif 'lowerDepth' in child.tag:
+                                    for inmeting in child.iter():
+                                        if 'value' in inmeting.tag:
+                                            lowerDepth = float(inmeting.text)
+                                            properties[featureId]['lower'] = lowerDepth / 100
+
+                    if 'relatedObservation' in child.tag:
+                        for baby in child.iter():
+                            for key in baby.attrib.keys():
+                                if 'href' in key:
+                                    featureId = baby.attrib[key].replace('#', '')
+                                    if featureId not in properties.keys():
+                                        properties[featureId] = {}
+                    elif child.text is not None:
+                        if 'Grondsoort:' in child.text: # er is ook GrondsoortMediaan
+                            for inmeting in element.iter():
+                                if 'remarks' in inmeting.tag:
+                                    grondsoort = inmeting.text
+                                    properties[featureId]['soilName'] = grondsoort
+
+        # eigenschappen omzetten in een dataframe
+        properties = pd.DataFrame().from_dict(properties).T
+        properties = properties.astype(float, errors='ignore')
+
+        properties.dropna(axis=0, how='all', inplace=True)
+        properties.dropna(axis=0, subset=['soilName'], inplace=True)
+
+        # een dictionary om materiaalnamen om te zetten in nummers die gebruikt kunnen worden voor de plot
+        material_components = {"grind": 0, "zand": 1, "klei": 2, "silt": 5, "veen": 4, "leem": 3, "humeus": 4}
+
+        # Grondsoort omzetten in een dict met hoeveelheden
+        # voorbeeld: Klei zandig sterk, humeus matig of Veen zandig zwak
+        
+        components = []
+        for row in properties.itertuples():
+            soil = getattr(row, 'soilName')
+            # een dictionary om licht, matig, sterk om te zetten
+            amount_components = {'zwak': 0.05, 'matig': 0.1, 'sterk': 0.3}
+            tempdict = {}
+            for i, word in enumerate(soil.split(' ')):
+                # het eerste materiaal is de hoofdcomponent
+                if i == 0:
+                    main = material_components[word.lower()]
+                # als er een materiaal staat dan wordt dat een key in de dict
+                # als het niet de hoofdcomponent is, dan eindigt het op -ig
+                elif re.sub('ig', '', word) in material_components.keys():
+                    material = material_components[re.sub('ig', '', word)]
+                elif re.sub(',', '', word) in amount_components:
+                    amount = amount_components[re.sub(',', '', word)]
+                    # er kunnen meer materialen met dezelfde hoeveelheid zijn, maar een dict kan alleen unieke keys aan
+                    amount_components[re.sub(',', '', word)] -= 0.01
+                    tempdict[amount] = material
+            tempdict[1 - sum(list(tempdict.keys()))] = main
+
+            # sorteer ze van groot naar klein voor de plot 
+            tempdict = dict(sorted(tempdict.items(), reverse=True))
+            components.append(tempdict)
+
+        properties['components'] = components
+        properties['bore'] = properties.index.map(tests)
+
+        for i, boreId in enumerate(properties['bore'].unique()): # TODO: kan dit beter met groupby?
+            bore = Bore()
+            bore.soillayers = {}
+            bore.soillayers['veld'] = properties[properties['bore'] == boreId]
+            
+            # boreId is een lang en onduidelijk nummer, daarom een optie om eenvoudigere nummers te gebruiken
+            testIdIsBoreId = False
+            if testIdIsBoreId:
+                bore.testid = boreId
+            else:
+                bore.testid = i
+            
+            bore.groundlevel = boreXYZ[boreId]['groundlevel']
+            bore.easting = boreXYZ[boreId]['easting']
+            bore.northing = boreXYZ[boreId]['northing']
+            
+            bore.soillayers['veld']['upper_NAP'] = bore.groundlevel - bore.soillayers['veld']['upper']
+            bore.soillayers['veld']['lower_NAP'] = bore.groundlevel - bore.soillayers['veld']['lower']
+            bore.finaldepth = bore.soillayers['veld']['upper'].max()
+            self.bores.append(bore)
