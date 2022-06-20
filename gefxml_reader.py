@@ -947,6 +947,7 @@ class Bore():
         colorsDict = {0: "orange", 1: "yellow", 2: "green", 3: "yellowgreen", 4: "brown", 5: "grey", 6: "black"} # BRO style
         hatchesDict = {0: "ooo", 1: "...", 2: "///", 3:"", 4: "---", 5: "|||", 6: ""} # BRO style
 
+        # als er een veld- en een labbeschrijving is, dan maken we meer kolommen
         nrOfLogs = len(self.soillayers.keys())
         # maak een diagram met primaire en secundaire componenten
         fig = plt.figure(figsize=(6, self.finaldepth + 2)) 
