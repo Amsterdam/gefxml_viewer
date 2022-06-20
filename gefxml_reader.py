@@ -332,7 +332,7 @@ class Cpt():
         self.data = self.data.rename(columns=self.columninfo)
 
         # soms is er geen wrijvingsgetal gerapporteerd
-        if "frictionRatio" not in self.data.columns:
+        if "frictionRatio" not in self.data.columns or self.data["frictionRatio"].isna().all():
             # als er wel lokale wrijving is gerapporteerd, kan wrijvingsgetal berekend worden
             if "localFriction" in self.data.columns:
                 self.data["frictionRatio"] = 100 * self.data["localFriction"] / self.data["coneResistance"]
