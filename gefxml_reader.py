@@ -606,7 +606,9 @@ class Cpt():
         }
         
         # formule voor non-normalized soil behaviour type
-        sbt = lambda qc, rf, isbt: ((3.47 - np.log10(qc * 1000 / 100)) ** 2 + (np.log10(rf + 1.22)) ** 2) ** 0.5 - isbt > 0
+        # TODO: deze formule is er twee vormen
+        # er is ook https://cpt-robertson.com/PublicationsPDF/CPT%20Guide%206th%202015.pdf
+        sbt = lambda qc, rf, isbt: ((3.47 - np.log10(qc * 1000 / 100)) ** 2 + (np.log10(rf) + 1.22) ** 2) ** 0.5 - isbt > 0
         
         conditions = [
             sbt(self.data['coneResistance'], self.data['frictionRatio'], value) for value in sbtDict.values()
