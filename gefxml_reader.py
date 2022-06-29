@@ -4,7 +4,7 @@ Script om sonderingen en boringen vanuit GEF of XML (BRO) in te lezen en te plot
 
 __author__ = "Thomas van der Linden"
 __credits__ = ""
-__license__ = "MPL-2.0"
+__license__ = "EUPL-1.2"
 __version__ = ""
 __maintainer__ = "Thomas van der Linden"
 __email__ = "t.van.der.linden@amsterdam.nl"
@@ -22,7 +22,6 @@ from matplotlib.gridspec import GridSpec
 import matplotlib.pyplot as plt
 from datetime import date, datetime
 from shapely.geometry import Point
-import geopandas as gpd
 from xml.etree.ElementTree import ElementTree
 import pyproj
 
@@ -64,6 +63,8 @@ class Test():
         # TODO: dit kan beter, maar er lijkt niet echt een standaard te zijn
         if 'CPTSTANDARD' in raw_xml.upper():
             return 'cpt'
+        elif 'SIKB0101' in raw_xml.upper():
+            return 'sikb'
         else:
             return 'bore'
 
@@ -236,11 +237,12 @@ class Cpt():
             pass
 
         # check oude RD-coördinaten
-        if self.easting < 0:
-            geometry = Point([self.easting, self.northing])
-            reprojectedGeometry = gpd.GeoSeries(geometry, crs="epsg:28991").to_crs("epsg:28992")
-            self.easting = reprojectedGeometry.x
-            self.northing = reprojectedGeometry.y
+        if self.easting < 13500 or self.northing < 306000:
+          
+            rd = pyproj.Proj(projparams='epsg:28992')
+            rd_oud = pyproj.Proj(projparams='epsg:28991')
+
+            self.easting, self.northing = pyproj.transform(rd_oud, rd, self.easting, self.northing)
 
         try:
             match = re.search(zdz_id_pattern, gef_raw)
@@ -614,7 +616,7 @@ class Cpt():
             sbt(self.data['coneResistance'], self.data['frictionRatio'], value) for value in sbtDict.values()
         ]
         choices = sbtDict.keys()
-        self.data[ 'Robertson'] = np.select(conditions, choices, None)
+        self.data['Robertson'] = np.select(conditions, choices, None)
 
         return self.data
 
@@ -758,12 +760,13 @@ class Bore():
             pass
 
         # check oude RD-coördinaten
-        if self.easting < 0:
-            geometry = Point([self.easting, self.northing])
-            reprojectedGeometry = gpd.GeoSeries(geometry, crs="epsg:28991").to_crs("epsg:28992")
-            self.easting = reprojectedGeometry.x
-            self.northing = reprojectedGeometry.y
+        if self.easting < 13500 or self.northing < 306000:
+          
+            rd = pyproj.Proj(projparams='epsg:28992')
+            rd_oud = pyproj.Proj(projparams='epsg:28991')
 
+            self.easting, self.northing = pyproj.transform(rd_oud, rd, self.easting, self.northing)
+            
         try:
             match = re.search(z_id_pattern, gef_raw)
             self.groundlevel = float(match.group('Z'))
@@ -1048,7 +1051,7 @@ class Bore():
         plt.close('all')
 
 
-    def from_cpt(self, cpt, interpretationModel='customInterpretation'):
+    def from_cpt(self, cpt, interpretationModel='Robertson'):
 
         # maak een object alsof het een boring is
         self.soillayers['cpt']= pd.DataFrame(columns=['geotechnicalSoilName', 'frictionRatio', 'coneResistance', 'upper_NAP', 'lower_NAP'])
