@@ -2,7 +2,7 @@
 import tkinter as tk
 from tkinter import filedialog
 import os
-from gefxml_reader import Cpt, Bore, Test
+from gefxml_reader import Cpt, Bore, Multibore, Test
 
 main_win = tk.Tk()
 
@@ -73,6 +73,11 @@ def plot_tests(files, output):
                     cpt = Cpt()
                     cpt.load_xml(f)
                     cpt.plot(output)
+                elif testType == 'sikb':
+                    mb = Multibore()
+                    mb.load_xml_sikb0101(f)
+                    for bore in mb.bores:
+                        bore.plot(output)
                 elif testType == 'bore':
                     bore = Bore()
                     bore.load_xml(f)
