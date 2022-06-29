@@ -4,7 +4,7 @@ Script om sonderingen en boringen vanuit GEF of XML (BRO) in te lezen en te plot
 
 __author__ = "Thomas van der Linden"
 __credits__ = ""
-__license__ = "MPL-2.0"
+__license__ = "EUPL-1.2"
 __version__ = ""
 __maintainer__ = "Thomas van der Linden"
 __email__ = "t.van.der.linden@amsterdam.nl"
