@@ -39,6 +39,17 @@ gui_gef2gpkg.py provides a point and click interface to get coordinates and othe
 1. kopieer en plak:
 * `conda env create --file environment.yml`
 
+## De applicatie updaten
+De applicatie is nog niet uitontwikkeld en er komen updates beschikbaar.
+Heb je de applicatie eerder al opgeslagen met de stappen onder _De applicatie opslaan (dit is allemaal eenmalig)_?
+Dan kun je zo de nieuwste versie krijgen:
+1. Ga naar de map waarin de bestanden zijn opgeslagen, in het voorbeeld heet deze _scripts/gefxml\_viewer_
+1. Klik in de map _scripts/gefxml\_viewer_ met de rechtermuisknop en kies voor _Git Bash here_ (windows 10) of _Open Git Bash_ (windows 11)
+1. Kopieer en plak (met rechtse muisknop of shift + Insert):
+* `git pull main https://github.com/Amsterdam/gefxml_viewer.git`
+1. Je kan het Git bash venster nu afsluiten met `exit`
+1. Je hebt de nieuwste versie
+
 ## Plaatjes maken van sonderingen en boringen
 In de _Anaconda Prompt (Miniconda3)_ kopieer en plak:
 * `conda activate geo_env` (dit moet je iedere keer doen wanneer je begint met een sessie)

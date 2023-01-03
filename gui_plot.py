@@ -53,12 +53,11 @@ def plot_tests(files, output):
     for f in files:
         print(f)
         if f.lower().endswith('gef'):
-#            try:
-                testType = Test().load_gef(f)
+            try:
+                testType = Test().type_from_gef(f)
                 if testType == 'cpt':
                     cpt = Cpt()
-                    cpt.load_gef(f)
-                    cpt.interpret()
+                    cpt.load_gef(f, checkAddFrictionRatio=True, checkAddDepth=True)
                     cpt.plot(output)
                     cptAsBore = Bore()
                     cptAsBore.from_cpt(cpt, interpretationModel='Robertson') # 'qcOnly', 'threeType', 'NEN', 'Robertson', 'customInterpretation' 
@@ -67,29 +66,29 @@ def plot_tests(files, output):
                     bore = Bore()
                     bore.load_gef(f)
                     bore.plot(output)
-#            except:
-#                print(f'{f} fout in bestand')
-#                pass
+            except Exception as e: 
+                print(f, e)
         elif f.lower().endswith('xml'):
-#            try:
-                testType = Test().load_xml(f)
+            try:
+                testType = Test().type_from_xml(f)
                 if testType == 'cpt':
                     cpt = Cpt()
                     cpt.load_xml(f)
 #                    cpt.interpret() # TODO: dit geeft soms een foutmelding met ontbrekende frictionRatio
                     cpt.plot(output)
                 elif testType == 'sikb':
+                    projectName = 'sikb' # TODO: dit kan beter een variabele zijn
                     mb = Multibore()
-                    mb.load_xml_sikb0101(f)
+                    mb.load_xml_sikb0101(f, projectName)
                     for bore in mb.bores:
                         bore.plot(output)
                 elif testType == 'bore':
                     bore = Bore()
                     bore.load_xml(f)
                     bore.plot(output)
-#            except:
-#                print(f'{f} fout in bestand')
-#                pass
+            except Exception as e: 
+                print(f, e)
+
 
 if main_win.sourceFolder != '':
     filelist = os.listdir(main_win.sourceFolder)

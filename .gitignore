@@ -1,0 +1,19 @@
+# de inhoud van, maar niet de mappen zelf met input en output
+output/*
+input/*
+
+# map pycache
+__pycache/
+
+# invoer en uitvoer bestanden algemeen
+.xml
+.gef
+.zip
+.png
+
+# uitvoer bestanden gemaakt van sikb boringen
+.csv
+.geojson 
+
+# log bestanden
+.log
