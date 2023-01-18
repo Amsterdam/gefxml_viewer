@@ -14,8 +14,8 @@ tk.Label(main_win, image=logo2).place(x=15, y=5)
 
 script_version = ''
 script_name = 'Thomas van der Linden'
-tk.Label(main_win, text='Plot GEF Python Script ', fg='black', font='Courier 16 bold').pack()
-tk.Label(main_win, text='Lees GEF bestanden in map met Python =) of kies één of meerdere GEF-file(s)', fg='black', font='Courier 12').pack()
+tk.Label(main_win, text='Plot GEF & XML Python Script ', fg='black', font='Courier 16 bold').pack()
+tk.Label(main_win, text='Lees GEF & XML (BRO, SIKB) bestanden in een map of losse bestand(en)', fg='black', font='Courier 12').pack()
 tk.Label(main_win, text = 'Script: ' + script_name, fg='grey', font='Courier 10').place(x=800, y=280)
 tk.Label(main_win, text = 'Versie: ' + script_version, fg='grey', font='Courier 10').place(x=1095, y=280)
 
@@ -80,8 +80,8 @@ def plot_tests(files, output):
                     projectName = 'sikb' # TODO: dit kan beter een variabele zijn
                     mb = Multibore()
                     mb.load_xml_sikb0101(f, projectName)
-                    for bore in mb.bores:
-                        bore.plot(output)
+#                    for bore in mb.bores:
+#                        bore.plot(output)
                 elif testType == 'bore':
                     bore = Bore()
                     bore.load_xml(f)
@@ -97,4 +97,4 @@ if main_win.sourceFolder != '':
 
 elif len(main_win.sourceFiles) >= 1: 
     files = list(main_win.sourceFiles)
-    plot_tests(files, './output/')
+    plot_tests(files, './output')
