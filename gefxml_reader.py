@@ -10,9 +10,7 @@ __maintainer__ = "Thomas van der Linden"
 __email__ = "t.van.der.linden@amsterdam.nl"
 __status__ = "Dev"
 
-from dataclasses import dataclass, field
-from email import header
-from operator import index
+from dataclasses import dataclass
 from typing import OrderedDict
 import pandas as pd
 from io import StringIO
@@ -20,7 +18,6 @@ import numpy as np
 import re
 from matplotlib.gridspec import GridSpec
 import matplotlib.pyplot as plt
-from datetime import date, datetime
 from xml.etree.ElementTree import ElementTree
 import pyproj
 import ast
@@ -1697,7 +1694,7 @@ class Multibore():
 
                     # schrijf een csv weg als er lagen in de boorbeschrijving zitten. Als je alles meteen omzet naar een plot, dan crasht het bij grote hoeveelheden boringen
                     if len(bore.soillayers['veld']) > 0:
-                        bore.soillayers['veld'].to_csv(f'./output/{projectName}/{fileName}/{bore.testid}.csv', sep=';')
+                        bore.soillayers['veld'].to_csv(f'./output/{projectName}/{fileName}/{bore.testid}_{boreId}.csv', sep=';')
                         boorbeschrijving = True
                     else:
                         boorbeschrijving = False
@@ -1705,7 +1702,7 @@ class Multibore():
                     geometries.append(Point(bore.easting, bore.northing)) 
                     xs.append(bore.easting)
                     ys.append(bore.northing)
-                    fs.append(bore.testid)
+                    fs.append(f'{bore.testid}_{boreId}')
                     groundlevels.append(bore.groundlevel)
                     depths.append(onderkant)
                     peilbuizen.append(peilbuisAanwezig)
