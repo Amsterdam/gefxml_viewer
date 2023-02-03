@@ -19,6 +19,7 @@ import re
 from matplotlib.gridspec import GridSpec
 import matplotlib.pyplot as plt
 from xml.etree.ElementTree import ElementTree
+import xml.etree.ElementTree as ET
 import pyproj
 import ast
 import os
@@ -251,12 +252,18 @@ class Cpt(Test):
         self.filedate = {}
         self.testdate = {}
 
-    def load_xml(self, xmlFile, checkAddFrictionRatio=False, checkAddDepth=False):
+    def load_xml(self, xmlFile, checkAddFrictionRatio=False, checkAddDepth=False, file=True):
 
         # lees een CPT in vanuit een BRO XML
         tree = ElementTree()
-        tree.parse(xmlFile)
-        root = tree.getroot()
+        if file:
+            # Standaard functionaliteit voor wanneer de XML uit een file wordt gelezen
+            tree.parse(xmlFile)
+            root = tree.getroot()
+        else:
+            # Indien het file argument of False wordt gezet, kan de data uit een string worden gelezen
+            # xmlFile is dan de string met XML 
+            root = ET.fromstring(xmlFile)
 
         for element in root.iter():
 
@@ -294,9 +301,11 @@ class Cpt(Test):
                 # TODO: maak hier van een Bore() en plot die ook
                 self.removedlayers = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}      
 
-        filename_pattern = re.compile(r'(.*[\\/])*(?P<filename>.*)\.')
-        match = re.search(filename_pattern, xmlFile)
-        self.filename = match.group('filename')
+        if file:
+            # Dit is enkel nodig als de XML uit een file komt
+            filename_pattern = re.compile(r'(.*[\\/])*(?P<filename>.*)\.')
+            match = re.search(filename_pattern, xmlFile)
+            self.filename = match.group('filename')
 
         dataColumns = [
             "penetrationLength", "depth", "elapsedTime", 
