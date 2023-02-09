@@ -49,7 +49,7 @@ b_ContinueButton.config(font=('Courier 14 bold'))
 
 main_win.mainloop()
 
-def plot_tests(files, output):
+def plot_tests(files, output, interpretCpt=False):
     for f in files:
         print(f)
         if f.lower().endswith('gef'):
@@ -59,9 +59,10 @@ def plot_tests(files, output):
                     cpt = Cpt()
                     cpt.load_gef(f, checkAddFrictionRatio=True, checkAddDepth=True)
                     cpt.plot(output)
-                    cptAsBore = Bore()
-                    cptAsBore.from_cpt(cpt, interpretationModel='Robertson') # 'qcOnly', 'threeType', 'NEN', 'Robertson', 'customInterpretation' 
-                    cptAsBore.plot(path='./output/cptasbore')
+                    if interpretCpt:
+                        cptAsBore = Bore()
+                        cptAsBore.from_cpt(cpt, interpretationModel='Robertson') # 'qcOnly', 'threeType', 'NEN', 'Robertson', 'customInterpretation' 
+                        cptAsBore.plot(path='./output/cptasbore')
                 elif testType == 'bore':
                     bore = Bore()
                     bore.load_gef(f)

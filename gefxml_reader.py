@@ -270,7 +270,7 @@ class Cpt(Test):
             if 'broId' in element.tag or 'objectIdAccountableParty' in element.tag:
                 self.testid = element.text
 
-            if 'deliveredLocation' in element.tag:
+            elif 'deliveredLocation' in element.tag:
                 location = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}
                 self.easting = float(location['pos'].split()[0])
                 self.northing = float(location['pos'].split()[1])
