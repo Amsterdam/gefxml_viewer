@@ -991,7 +991,14 @@ class Bore(Test):
         
         GEF_COLINFO = { 
             '1': 'upper',
-            '2': 'lower'
+            '2': 'lower',
+            '3': 'lutum',
+            '4': 'silt',
+            '5': 'sand',
+            '6': 'grind',
+            '7': 'organische stof',
+            '8': 'zandmediaan',
+            '9': 'grindmediaan'
         }
 
         data_pattern = re.compile(r'#EOH\s*=\s*(?P<data>(.*\n)*)')
@@ -1072,12 +1079,11 @@ class Bore(Test):
     def add_components_NEN(self):
         # zet de codering om in iets dat geplot kan worden
         material_pattern = re.compile(r'(?P<main>[GKLSVZ])(?P<second>[ghklsvz])?(?P<secondQuantity>\d)?(?P<third>[ghklsvz])?(?P<thirdQuantity>\d)?(?P<fourth>[ghklsvz])?(?P<fourthQuantity>\d)?')
-
         components = []
         for row in self.soillayers['veld'].itertuples():
             componentsRow = {}
             material = str(getattr(row, 'soilName')) # kreeg een keer 0 als material, vandaar de str
-            if material in ['NBE', '0', 'PU']:
+            if material in ['NBE', '0', 'PU', 'nan']:
                 main = 'N'
                 secondQuantity, thirdQuantity, fourthQuantity = 0, 0, 0
             else:

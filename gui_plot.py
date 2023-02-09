@@ -74,7 +74,7 @@ def plot_tests(files, output, interpretCpt=False):
                 testType = Test().type_from_xml(f)
                 if testType == 'cpt':
                     cpt = Cpt()
-                    cpt.load_xml(f)
+                    cpt.load_xml(f, checkAddFrictionRatio=True, checkAddDepth=True)
 #                    cpt.interpret() # TODO: dit geeft soms een foutmelding met ontbrekende frictionRatio
                     cpt.plot(output)
                 elif testType == 'sikb':
