@@ -35,17 +35,24 @@ class Test():
         
         with open(gefFile) as f:
             gef_raw = f.read()
-        for pattern in [procedure_pattern, report_pattern]:
-            try:
-                match = re.search(pattern, gef_raw)
-                if 'CPT' in match.group('type').upper():
-                    return 'cpt'
-                elif 'BORE' in match.group('type').upper():
-                    return 'bore'
-            except Exception as e:
-                print(e)
-                print(f'geen type gevonden voor {f}')
-                pass
+
+        try:
+            match = re.search(procedure_pattern, gef_raw)
+            if 'CPT' in match.group('type').upper():
+                return 'cpt'
+            elif 'BORE' in match.group('type').upper():
+                return 'bore'
+        except:
+            pass
+
+        try:
+            match = re.search(report_pattern, gef_raw)
+            if 'CPT' in match.group('type').upper():
+                return 'cpt'
+            elif 'BORE' in match.group('type').upper():
+                return 'bore'
+        except:
+            pass
 
     def type_from_xml(self, xmlFile):
         with open(xmlFile) as f:
