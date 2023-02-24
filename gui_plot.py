@@ -49,7 +49,7 @@ b_ContinueButton.config(font=('Courier 14 bold'))
 
 main_win.mainloop()
 
-def plot_tests(files, output, interpretCpt=False):
+def plot_tests(files, output, interpretCpt=False, outputType='png'):
     for f in files:
         print(f)
         if f.lower().endswith('gef'):
@@ -58,15 +58,15 @@ def plot_tests(files, output, interpretCpt=False):
                 if testType == 'cpt':
                     cpt = Cpt()
                     cpt.load_gef(f, checkAddFrictionRatio=True, checkAddDepth=True)
-                    cpt.plot(output)
+                    cpt.plot(output,outputType=outputType)
                     if interpretCpt:
                         cptAsBore = Bore()
                         cptAsBore.from_cpt(cpt, interpretationModel='Robertson') # 'qcOnly', 'threeType', 'NEN', 'Robertson', 'customInterpretation' 
-                        cptAsBore.plot(path='./output/cptasbore')
+                        cptAsBore.plot(path='./output/cptasbore', outputType=outputType)
                 elif testType == 'bore':
                     bore = Bore()
                     bore.load_gef(f)
-                    bore.plot(output)
+                    bore.plot(output,outputType=outputType)
             except Exception as e: 
                 print(f, e)
         elif f.lower().endswith('xml'):
@@ -76,17 +76,17 @@ def plot_tests(files, output, interpretCpt=False):
                     cpt = Cpt()
                     cpt.load_xml(f, checkAddFrictionRatio=True, checkAddDepth=True)
 #                    cpt.interpret() # TODO: dit geeft soms een foutmelding met ontbrekende frictionRatio
-                    cpt.plot(output)
+                    cpt.plot(output, outputType=outputType)
                 elif testType == 'sikb':
                     projectName = 'sikb' # TODO: dit kan beter een variabele zijn
                     mb = Multibore()
                     mb.load_xml_sikb0101(f, projectName)
 #                    for bore in mb.bores:
-#                        bore.plot(output)
+#                        bore.plot(output, outputType=outputType)
                 elif testType == 'bore':
                     bore = Bore()
                     bore.load_xml(f)
-                    bore.plot(output)
+                    bore.plot(output,outputType=outputType)
             except Exception as e: 
                 print(f, e)
 
@@ -94,8 +94,8 @@ def plot_tests(files, output, interpretCpt=False):
 if main_win.sourceFolder != '':
     filelist = os.listdir(main_win.sourceFolder)
     files = [f'{main_win.sourceFolder}/{f}' for f in filelist]
-    plot_tests(files, main_win.sourceFolder)
+    plot_tests(files, main_win.sourceFolder, outputType='pdf')
 
 elif len(main_win.sourceFiles) >= 1: 
     files = list(main_win.sourceFiles)
-    plot_tests(files, './output')
+    plot_tests(files, './output', outputType='pdf')
