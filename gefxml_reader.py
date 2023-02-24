@@ -584,7 +584,7 @@ class Cpt(Test):
                 self.data["frictionRatio"] = 0
 
 
-    def plot(self, path='./output'):
+    def plot(self, path='./output', saveFigAsPng=True):
         if self.groundlevel == None:
             self.groundlevel = 0
 
@@ -689,20 +689,23 @@ class Cpt(Test):
         ax.grid(which='minor', linestyle='-', linewidth='0.1')
         ax.grid(b=True, which='both')
 
-        # sla de figuur op
-        plt.tight_layout()
-        plt.savefig(fname=f"./output/{self.filename}.png")
-        plt.close('all')
+        if saveFigAsPng:
+            # sla de figuur op
+            plt.tight_layout()
+            plt.savefig(fname=f"./output/{self.filename}.png")
+            plt.close('all')
 
-        # andere optie voor bestandsnaam
-        save_as_projectid_fromfile = False
-        if save_as_projectid_fromfile:
-            if self.projectid is not None: # TODO: dit moet ergens anders. Moet ook projectid uit mapid kunnen halen
-                plt.savefig(fname=f"./output/{self.projectid}_{self.testid}.png")
-                plt.close('all')
-            elif self.projectname is not None:
-                plt.savefig(fname=f"{path}/{self.projectname}_{self.testid}.png")
-                plt.close('all')
+            # andere optie voor bestandsnaam
+            save_as_projectid_fromfile = False
+            if save_as_projectid_fromfile:
+                if self.projectid is not None: # TODO: dit moet ergens anders. Moet ook projectid uit mapid kunnen halen
+                    plt.savefig(fname=f"./output/{self.projectid}_{self.testid}.png")
+                    plt.close('all')
+                elif self.projectname is not None:
+                    plt.savefig(fname=f"{path}/{self.projectname}_{self.testid}.png")
+                    plt.close('all')
+
+        return fig
 
     def check_add_depth(self):
         # soms is er geen diepte, maar wel sondeerlengte aanwezig
@@ -1152,7 +1155,7 @@ class Bore(Test):
         self.soillayers['veld']["components"] = components
         return self.soillayers
 
-    def plot(self, path='./output'):
+    def plot(self, path='./output', saveFigAsPng=True):
 
         materials = {0: 'grind', 1: 'zand', 2: 'klei', 3: 'leem', 4: 'veen', 5: 'silt', 6: 'overig'}
         colorsDict = {0: "orange", 1: "yellow", 2: "green", 3: "", 4: "brown", 5: "grey", 6: "black"} # NEN-EN-ISO 14688-1 style, geen leem
@@ -1259,9 +1262,11 @@ class Bore(Test):
         plt.text(0.05, 0.2, 'Ingenieursbureau Gemeente Amsterdam Vakgroep Geotechniek Python ', fontsize=10)
 
 #        plt.tight_layout() # TODO: werkt niet met text die wrapt
-        plt.savefig(fname=f'{path}/{self.testid}.png')
-        plt.close('all')
+        if saveFigAsPng:
+            plt.savefig(fname=f'{path}/{self.testid}.png')
+            plt.close('all')
 
+        return fig
 
     def from_cpt(self, cpt, interpretationModel='Robertson'):
 
