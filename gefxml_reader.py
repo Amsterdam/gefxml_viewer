@@ -1279,7 +1279,7 @@ class Bore(Test):
 
 #        plt.tight_layout() # TODO: werkt niet met text die wrapt
 
-        if saveFigAsPng:
+        if saveFig:
             plt.savefig(fname=f'{path}/{self.testid}.{outputType}')
             plt.close('all')
 
