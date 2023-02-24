@@ -252,16 +252,16 @@ class Cpt(Test):
         self.filedate = {}
         self.testdate = {}
 
-    def load_xml(self, xmlFile, checkAddFrictionRatio=False, checkAddDepth=False, file=True):
+    def load_xml(self, xmlFile, checkAddFrictionRatio=False, checkAddDepth=False, fromFile=True):
 
         # lees een CPT in vanuit een BRO XML
         tree = ElementTree()
-        if file:
+        if fromFile:
             # Standaard functionaliteit voor wanneer de XML uit een file wordt gelezen
             tree.parse(xmlFile)
             root = tree.getroot()
         else:
-            # Indien het file argument of False wordt gezet, kan de data uit een string worden gelezen
+            # Indien het fromFile argument op False wordt gezet, kan de data uit een string worden gelezen (lezen via API)
             # xmlFile is dan de string met XML 
             root = ET.fromstring(xmlFile)
 
@@ -301,7 +301,7 @@ class Cpt(Test):
                 # TODO: maak hier van een Bore() en plot die ook
                 self.removedlayers = {re.sub(r'{.*}', '', p.tag) : re.sub(r'\n\s*', '', p.text) for p in element.iter() if p.text is not None}      
 
-        if file:
+        if fromFile:
             # Dit is enkel nodig als de XML uit een file komt
             filename_pattern = re.compile(r'(.*[\\/])*(?P<filename>.*)\.')
             match = re.search(filename_pattern, xmlFile)
@@ -865,12 +865,19 @@ class Bore(Test):
         self.metadata = {}
         self.descriptionquality = None
 
-    def load_xml(self, xmlFile):
-        # TODO: werkt nog niet voor IMBRO_A
+    def load_xml(self, xmlFile, fromFile=True):
+
         # lees een boring in vanuit een BRO XML
-        tree = ElementTree()
-        tree.parse(xmlFile)
-        root = tree.getroot()
+        # TODO: werkt nog niet voor IMBRO_A
+        if fromFile:
+            # Standaard functionaliteit voor wanneer de XML uit een file wordt gelezen
+            tree = ElementTree()
+            tree.parse(xmlFile)
+            root = tree.getroot()
+        else:
+            # Indien het fromFile argument op False wordt gezet, kan de data uit een string worden gelezen (lezen via API)
+            # xmlFile is dan de string met XML 
+            root = ET.fromstring(xmlFile)
 
         for element in root.iter():
 
