@@ -1,0 +1,24 @@
+name: Run test.py on .gef File Push
+
+on:
+  push:
+    paths:
+      - 'input/**/*.gef'  # Trigger the action when .gef files are pushed to the 'input' directory
+
+jobs:
+  run_test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'  # Set the Python version you need
+
+    - name: Run test.py
+      run: python test.py  # Replace 'input/test.py' with the actual path to your test.py script
+
+    # Add any additional steps you need, like deploying or saving test results
